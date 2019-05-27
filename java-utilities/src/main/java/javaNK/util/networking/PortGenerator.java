@@ -71,7 +71,7 @@ public class PortGenerator
 	 * @return true if the allocation was successful.
 	 */
 	public static boolean allocate(String name, int port) {
-		if (LEGAL_RANGE.intersects(port) && test(port)) {
+		if (LEGAL_RANGE.intersects(port)) {
 			allocatedPorts.put(name, port);
 			return true;
 		}

@@ -29,7 +29,7 @@ public class Protocol
 	 */
 	private class Waker extends Protocol
 	{
-		private static final double ACK_REPEAT = 0.2;
+		private static final double ACK_REPEAT = 2;
 		
 		private Timer timer;
 		private TimerTask task;
