@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.math.RNG;
+import java.util.math.Range;
 
 /**
  * This class finds a free port to connect to,
@@ -17,6 +17,7 @@ public class PortGenerator
 {
 	private static final int MIN_PORT = 1024;
 	private static final int MAX_PORT = (int) Character.MAX_VALUE;
+	private static final Range<Integer> LEGAL_RANGE = new Range<Integer>(MIN_PORT, MAX_PORT);
 	
 	private static Map<String, Integer> allocatedPorts = new HashMap<String, Integer>();
 	
@@ -25,30 +26,39 @@ public class PortGenerator
 	 * @return a free port number.
 	 */
 	public static int nextPort() throws PortsUnavailableException {
-		DatagramSocket testSocket;
 		int port = 0;
 		int portsAmount = (MAX_PORT - MIN_PORT) + allocatedPorts.size();
 		Set<Integer> failedPorts = new HashSet<Integer>();
 		
 		//test ports until one manages to connect
 		while (true) {
-			try {
-				do port = RNG.generate(MIN_PORT, MAX_PORT);
-				while(failedPorts.contains(port) || allocatedPorts.containsValue(port));
-				
-				testSocket = new DatagramSocket(port);
-				testSocket.close();
-				break;
-			}
-			catch(SocketException e) {
+			do port = (int) LEGAL_RANGE.generate();
+			while(failedPorts.contains(port) || allocatedPorts.containsValue(port));
+			
+			if (test(port)) return port;
+			else {
 				failedPorts.add(port);
 				
 				if (failedPorts.size() < portsAmount) continue;
 				else throw new PortsUnavailableException();
 			}
 		}
+	}
+	
+	/**
+	 * Test a connection to a port.
+	 * @param port - The port to test
+	 * @return true if the connection was successful.
+	 */
+	public static boolean test(int port) {
+		DatagramSocket testSocket;
 		
-		return port;
+		try {
+			testSocket = new DatagramSocket(port);
+			testSocket.close();
+			return true;
+		}
+		catch(SocketException e) { return false; }
 	}
 	
 	/**
@@ -57,9 +67,14 @@ public class PortGenerator
 	 * 
 	 * @param name - The name of the allocated port
 	 * @param port - port number
+	 * @return true if the allocation was successful.
 	 */
-	public static void allocate(String name, int port) {
-		allocatedPorts.put(name, port);
+	public static boolean allocate(String name, int port) {
+		if (LEGAL_RANGE.intersects(port) && test(port)) {
+			allocatedPorts.put(name, port);
+			return true;
+		}
+		else return false;
 	}
 	
 	/**
