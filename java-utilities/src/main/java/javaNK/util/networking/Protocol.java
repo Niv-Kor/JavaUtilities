@@ -194,9 +194,12 @@ public class Protocol
 		}
 		
 		//check if local buffer has the compatible answer
-		for (String pre : keys)
-			if (localBuffer.containsKey(pre))
+		for (String pre : keys) {
+			if (localBuffer.containsKey(pre)) {
+				buffers.remove(localBuffer);
 				return localBuffer.get(pre);
+			}
+		}
 		
 		return waitFor(keys, localBuffer);
 	}
@@ -243,8 +246,10 @@ public class Protocol
 					otherBuffer.put(answer.getType(), answer);
 			
 			//check if local buffer has the compatible answer
-			if (localBuffer.containsKey(expectedType))
+			if (localBuffer.containsKey(expectedType)) {
+				buffers.remove(localBuffer);
 				return localBuffer.get(expectedType);
+			}
 			
 			//try again
 			return stubbornRequest(responseTo, localBuffer);
