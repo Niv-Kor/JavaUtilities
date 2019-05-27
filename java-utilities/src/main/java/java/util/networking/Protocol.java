@@ -9,7 +9,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.networking.JSON;
 
 /**
  * A TCP protocol used for communicating with a server.
@@ -84,7 +83,8 @@ public class Protocol
 	 */
 	public Protocol(boolean initWaker) throws IOException {
 		this.serverAddress = InetAddress.getLocalHost();
-		this.port = PortGenerator.nextPort();
+		try { this.port = PortGenerator.nextPort(); }
+		catch(PortsUnavailableException e) { throw new IOException(); }
 		connect();
 		
 		if (initWaker) {
@@ -260,4 +260,14 @@ public class Protocol
 	 * @return the target port this protocol communicates with.
 	 */
 	public int getTargetPort() { return target; }
+	
+	/**
+	 * @param p - The new port to use
+	 */
+	public void setPort(int p) { port = p; }
+	
+	/**
+	 * @param p - The new target port to communicate with
+	 */
+	public void setTargetPort(int p) { target = p; }
 }
