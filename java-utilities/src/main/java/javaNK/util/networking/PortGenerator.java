@@ -1,11 +1,12 @@
-package java.util.networking;
+package javaNK.util.networking;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.math.Range;
+
+import javaNK.util.math.Range;
 
 /**
  * This class finds a free port to connect to,

@@ -1,4 +1,4 @@
-package java.util.math;
+package javaNK.util.math;
 public class Range<T extends Number>
 {
 	private T min, max;

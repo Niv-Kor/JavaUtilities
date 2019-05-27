@@ -1,4 +1,4 @@
-package java.util.files;
+package javaNK.util.files;
 
 import java.io.File;
 import java.io.FileInputStream;

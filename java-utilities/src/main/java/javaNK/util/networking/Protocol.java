@@ -1,4 +1,4 @@
-package java.util.networking;
+package javaNK.util.networking;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -14,7 +14,7 @@ import java.util.TimerTask;
  * A TCP protocol used for communicating with a server.
  * This class sends and receives JSON objects as messages.
  * 
- * @see java.util.networking.JSON
+ * @see javaNK.util.networking.JSON
  * @author Niv Kor
  */
 public class Protocol

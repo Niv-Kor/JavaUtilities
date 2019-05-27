@@ -1,4 +1,4 @@
-package java.util.networking;
+package javaNK.util.networking;
 import java.io.IOException;
 
 /**

@@ -1,4 +1,4 @@
-package java.util.math;
+package javaNK.util.math;
 import java.awt.Dimension;
 
 public class Percentage

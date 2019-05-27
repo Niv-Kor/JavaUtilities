@@ -1,10 +1,11 @@
-package java.util.graphics;
+package javaNK.util.graphics;
 
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-import java.util.files.ImageHandler;
 
 import javax.swing.ImageIcon;
+
+import javaNK.util.files.ImageHandler;
 
 public class InteractiveIcon extends InteractiveComponent implements MouseListener
 {
