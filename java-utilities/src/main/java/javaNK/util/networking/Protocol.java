@@ -69,11 +69,11 @@ public class Protocol
 		}
 	}
 	
-	protected static List<HashMap<String, JSON>> buffers = new ArrayList<HashMap<String, JSON>>();
-	protected InetAddress serverAddress;
-	protected DatagramSocket socket;
-	protected Integer port, target;
-	protected Waker waker;
+	protected static volatile List<HashMap<String, JSON>> buffers = new ArrayList<HashMap<String, JSON>>();
+	protected volatile InetAddress serverAddress;
+	protected volatile DatagramSocket socket;
+	protected volatile Integer port, target;
+	protected volatile Waker waker;
 	
 	/**
 	 * @param initWaker - True to initialize a wake protocol that will prevent this protocol's starvation.
