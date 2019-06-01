@@ -1,5 +1,6 @@
 package javaNK.util.debugging;
 import java.time.LocalDateTime;
+import java.util.Scanner;
 import javaNK.util.math.NumeralHandler;
 import javaNK.util.networking.JSON;
 
@@ -9,6 +10,8 @@ public class Logger
 	private static final String POSTFIX = ": ";
 	
 	private static String prefix = "Logger";
+	private static Scanner scan = new Scanner(System.in);
+	private static boolean needNewLine;
 	
 	/**
 	 * Change the name of the logger, so all logs will be displayed as: "> [name]: [message]".
@@ -23,6 +26,9 @@ public class Logger
 	 * @param msg - The message to print
 	 */
 	public static void print(String msg) {
+		//add a new line if needed (after waiting for input and not getting it)
+		if (needNewLine) System.out.println();
+		
 		String period = (msg.charAt(msg.length() - 1) != '.') ? "." : "";
 		System.out.println(timeStamp() + " " + DASH + " " + prefix + POSTFIX + msg + period);
 	}
@@ -32,6 +38,21 @@ public class Logger
 	 */
 	public static void newLine() {
 		System.out.print(timeStamp() + " " + DASH + " ");
+		needNewLine = true;
+	}
+	
+	public static int inputInt() {
+		newLine();
+		int value = scan.nextInt();
+		needNewLine = false;
+		return value;
+	}
+	
+	public static String inputLine() {
+		newLine();
+		String value = scan.nextLine();
+		needNewLine = false;
+		return value;
 	}
 	
 	/**

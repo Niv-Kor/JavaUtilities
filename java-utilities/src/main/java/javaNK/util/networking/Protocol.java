@@ -4,15 +4,20 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.ConcurrentModificationException;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Map.Entry;
+import java.util.Queue;
+import java.util.Set;
+import javaNK.util.debugging.Logger;
+import javaNK.util.threads.ThreadUtility;
 
 /**
- * A TCP protocol used for communicating with a server.
- * This class sends and receives JSON objects as messages.
+ * A UDP protocol used for communicating with a server.
+ * This class is thread-safe, and can be used by many threads at the same time.
+ * It only sends and receives messages in the form of JSON object (also under this package). 
  * 
  * @see javaNK.util.networking.JSON
  * @author Niv Kor
@@ -20,106 +25,315 @@ import java.util.TimerTask;
 public class Protocol
 {
 	/**
-	 * This class creates a mini-protocol that's seemlessly sending acks to the main protocol
-	 * over and over again, in order to prevent its starvation.
-	 * It assures that the main protocol will never wait an infinite amount of time for a single message,
-	 * by regularly sending it meaningless acks that will be handled and thrown away. 
+	 * This class contains a request, composed by any thread that uses the protocol.
+	 * When a thread calls the waitFor() or request() methods, it creates a request,
+	 * containing the thread's ID, and a set of requests (message type keys).
 	 * 
 	 * @author Niv Kor
 	 */
-	private class Waker extends Protocol
+	private static class ThreadRequest
 	{
-		private static final double ACK_REPEAT = 0.2;
-		
-		private Timer timer;
-		private TimerTask task;
-		private boolean started;
-		private JSON wakeUpMessage;
+		private long threadID;
+		private Set<String> keys;
+		private Queue<Entry<String, JSON>> answers;
 		
 		/**
-		 * @see constructor ServerProtocol(boolean initWaker)
-		 * @param tiredProt - The main protocol to regularly wake
+		 * @param threadID - The ID of the thread that made the request
 		 */
-		public Waker(Protocol tiredProt) throws IOException {
-			super(false);
-			
-			this.wakeUpMessage = new JSON("wakeup");
-			
-			//retrieve the tired protocol's port as the target port
-			this.target = tiredProt.getPort();			
-			
-			this.timer = new Timer();
-			this.task = new TimerTask() {
-				@Override
-				public void run() {
-					try { send(wakeUpMessage); }
-					catch(IOException e) { e.printStackTrace(); }
-				}
-			};
+		public ThreadRequest(long threadID) {
+			this.threadID = threadID;
+			this.keys = new HashSet<String>();
+			this.answers = new LinkedList<Entry<String, JSON>>();
 		}
 		
 		/**
-		 * Start sending signals to the main protocol.
+		 * @return the requesting thread's ID
 		 */
-		public void start() {
-			if (started) return;
+		public long getThreadID() { return threadID; }
+		
+		/**
+		 * @return a set of keys the thread requested
+		 */
+		public Set<String> getKeys() { return keys; }
+		
+		/**
+		 * Add a key to the request.
+		 * 
+		 * @param key - The key to add
+		 */
+		public void addKey(String key) {
+			if (!keys.contains(key)) keys.add(key);
+		}
+		
+		/**
+		 * Add a received answer to the thread's request
+		 * 
+		 * @param key - The answer message's type
+		 * @param msg - The answer message itself
+		 */
+		public void putAnswer(String key, JSON msg) {
+			if (!keys.contains(key)) return;
+			else answers.add(new SimpleEntry<String, JSON>(key, msg));
+		}
+		
+		/**
+		 * Retrieve an answer for the request.
+		 * 
+		 * @return the answer, as it was received, or null if the answer is yet to arrive.
+		 */
+		public JSON retAnswer() {
+			try {
+				for (Entry<String, JSON> entry : answers)
+					if (keys.contains(entry.getKey()))
+						return entry.getValue();
+			}
+			catch(ConcurrentModificationException e) {}
 			
-			timer.schedule(task, 0, (int) (ACK_REPEAT * 1000));
-			started = true;
+			return null;
+		}
+		
+		@Override
+		public String toString() {
+			return "ID: " + threadID + " " + answers.toString();
 		}
 	}
 	
-	protected static volatile List<HashMap<String, JSON>> buffers = new ArrayList<HashMap<String, JSON>>();
+	/**
+	 * This class is the exclusive component in Protocol that's responsible for receiving messages.
+	 * Every message that's received here is immediately transfered to a PackageSorter object.
+	 * This class runs on a separate thread, in order to achieve better performance.
+	 * 
+	 * @author Niv Kor
+	 */
+	private static class PackageProcessor implements Runnable
+	{
+		private PackageSorter sorter;
+		private Protocol protocol;
+		
+		/**
+		 * @param protocol - The main Protocol object
+		 * @param sorter - The PackageSorter object that Protocol uses
+		 */
+		public PackageProcessor(Protocol protocol, PackageSorter sorter) {
+			this.protocol = protocol;
+			this.sorter = sorter;
+		}
+		
+		@Override
+		public void run() {
+			while (true) {
+				try { sorter.sortPackage(protocol.receive()); }
+				catch(IOException e) {
+					Logger.error("Processor error");
+					e.printStackTrace();
+					continue;
+				}
+				
+				ThreadUtility.delay(8);
+			}
+		}
+	}
+	
+	/**
+	 * This class gets a message that was received to the protocol,
+	 * and navigates it to the exact same thread that asked for it.
+	 * 
+	 * @author Niv Kor
+	 */
+	private static class PackageSorter implements Runnable
+	{
+		private Queue<JSON> messages;
+		private Set<ThreadRequest> requests;
+		
+		/**
+		 * @param protocol - The main protocol object
+		 */
+		public PackageSorter(Set<ThreadRequest> requests) {
+			this.requests = requests;
+			this.messages = new LinkedList<JSON>();
+		}
+
+		@Override
+		public void run() {
+			while (true) {
+				if (!messages.isEmpty()) {
+					JSON msg = messages.poll();
+					
+					//iterate over all thread requests
+					for (ThreadRequest threadReq : requests)
+						if (threadReq.getKeys().contains(msg.getType()))
+							threadReq.putAnswer(msg.getType(), msg);
+				}
+				
+				ThreadUtility.delay(8);
+			}
+		}
+		
+		/**
+		 * Add a package that needs to be sorted to the packages queue.
+		 * 
+		 * @param message - The message to sort
+		 */
+		public void sortPackage(JSON message) {
+			messages.add(message);
+		}
+	}
+		
+	protected volatile PackageSorter sorter;
+	protected volatile PackageProcessor processor;
+	protected volatile Set<ThreadRequest> requestBuffer;
+	protected volatile Queue<Long> requestingOrder;
 	protected volatile InetAddress serverAddress;
 	protected volatile DatagramSocket socket;
 	protected volatile Integer port, target;
-	protected volatile Waker waker;
 	
 	/**
-	 * @param initWaker - True to initialize a wake protocol that will prevent this protocol's starvation.
-	 * 					  For a safe functioning of the protocol, 'true' is highly recommended.
-	 * 
-	 * @throws IOException when the socket cannot connect to the host.
+	 * @throws IOException when connection cannot not be established.
 	 */
-	public Protocol(boolean initWaker) throws IOException {
+	public Protocol() throws IOException {
+		init(null, null);
+	}
+	
+	/**
+	 * @param port - The port this protocol will listen to
+	 * @throws IOException when connection cannot not be established.
+	 */
+	public Protocol(Integer port) throws IOException {
+		init(port, null);
+	}
+	
+	/**
+	 * @param port - The port this protocol will listen to
+	 * @param targetPort - The port this protocol will communicate with
+	 * @throws IOException when connection cannot not be established.
+	 */
+	public Protocol(Integer port, Integer targetPort) throws IOException {
+		init(port, targetPort);
+	}
+	
+	/**
+	 * Initiate class members
+	 * 
+	 * @throws IOException
+	 */
+	protected void init(Integer port, Integer target) throws IOException {
+		//ports
 		this.serverAddress = InetAddress.getLocalHost();
-		try { this.port = PortGenerator.nextPort(); }
+		
+		try { this.port = (port != null) ? port : PortGenerator.nextPort(); }
 		catch(PortsUnavailableException e) { throw new IOException(); }
+		
+		this.target = (target != null) ? target : 0;
+		
 		connect();
 		
-		if (initWaker) {
-			Waker waker = new Waker(this);
-			waker.start();
+		//threads requests buffer and order
+		this.requestBuffer = new HashSet<ThreadRequest>();
+		this.requestingOrder = new LinkedList<Long>();
+		
+		//package sorter
+		this.sorter = new PackageSorter(requestBuffer);
+		new Thread(sorter).start();
+		
+		//package processor
+		this.processor = new PackageProcessor(this, sorter);
+		new Thread(processor).start();
+	}
+	
+	/**
+	 * Wait for a specific packet from the target port.
+	 * This method is blocked and will not return a value just until a compatible answer arrives. 
+	 * If any of the requests get a compatible answer, that's enough for the method to exit and return it.
+	 * 
+	 * @param keys - Array of all the requests from the target port
+	 * @return any of the requests sent (whichever message is received first).
+	 * @throws IOException when the target port is unavailable for receiving messages from.
+	 */
+	public JSON waitFor(String[] keys) throws IOException {
+		long threadID = Thread.currentThread().getId();
+		openRequest(keys, threadID);
+		return waitFor(threadID, false);
+	}
+	
+	/**
+	 * @see waitFor(String[] keys)
+	 * @param threadID - The ID of the requesting thread
+	 * @param ordered - True if the order of request answering is important.
+	 * 					The ordered requests will be answered in the order they were created.
+	 */
+	protected JSON waitFor(long threadID, boolean ordered) throws IOException {
+		ThreadRequest threadReq = getThread(threadID);
+		JSON answer;
+		
+		while (true) {
+			answer = threadReq.retAnswer();
+			
+			//found the answer
+			if (answer != null) {
+				//request is ordered - wait to its turn
+				while (ordered) {
+					if (requestingOrder.peek() == threadID) {
+						requestingOrder.remove(threadID);
+						requestBuffer.remove(threadReq);
+						return answer;
+					}
+					else ThreadUtility.delay(20);
+				}
+				
+				//request is not ordered - return it
+				requestBuffer.remove(threadReq);
+				return answer;
+			}
+			else ThreadUtility.delay(20);
 		}
 	}
 	
 	/**
-	 * @param port - The port this protocol will use
-	 * @param targetPort - The port this protocol will communicate with
-	 * @throws IOException when the socket cannot connect to the host.
+	 * Send a message to the target port and wait until a compatible answer is received.
+	 * Both the request and the answer messaged MUST be of the same type.
+	 *  
+	 * @param msg - The request to the target port
+	 * @return an answer for the request.
+	 * @throws IOException when the target port is unavailable.
 	 */
-	public Protocol(Integer port, Integer targetPort) throws IOException {
-		this(true);
-		this.target = targetPort;
-		disconnect();
-		this.port = port;
-		connect();
+	public JSON request(JSON msg) throws IOException {
+		send(msg);
+		
+		long threadID = Thread.currentThread().getId();
+		requestingOrder.add(threadID);
+		String[] keys = { msg.getType() };
+		openRequest(keys, threadID);
+		return waitFor(threadID, true);
 	}
 	
 	/**
-	 * Create a socket and connect to the host.
+	 * Open a new request for a thread.
 	 * 
-	 * @throws SocketException when the socket is already binded.
+	 * @param req - The array of keys to request
+	 * @param threadID - The thread's ID
 	 */
-	protected void connect() throws SocketException {
-		socket = new DatagramSocket(port);
+	public void openRequest(String[] req, long threadID) {
+		ThreadRequest threadReq = getThread(threadID);
+		
+		//if this thread had never made a request before, create an entry for it
+		if (threadReq == null) {
+			requestBuffer.add(new ThreadRequest(threadID));
+			threadReq = getThread(threadID);
+		}
+		
+		//insert new requests
+		for (String key : req) threadReq.addKey(key);
 	}
 	
-	/**
-	 * Close the socket.
-	 */
-	protected void disconnect() {
-		socket.close();
+	private ThreadRequest getThread(long threadID) {
+		try {
+			for (ThreadRequest req : requestBuffer)
+				if (req.getThreadID() == threadID) return req;
+		}
+		//multithreading problem, try again
+		catch(ConcurrentModificationException e) { return getThread(threadID); }
+		
+		return null;
 	}
 	
 	/**
@@ -151,109 +365,19 @@ public class Protocol
 	}
 	
 	/**
-	 * Wait for a specific packet from the target port.
-	 * In this method, whenever receiving a message that's incompatible with the request,
-	 * it's not thrown away, but rather waiting in a buffer where it can be found later.
-	 * If any of the requests get a compatible answer, that's enough to exit the method. 
+	 * Create a socket and connect to the host.
 	 * 
-	 * @param keys - Array of all the requests from the target port
-	 * @return any of the requests sent (whichever message is recieved first).
-	 * @throws IOException when the target port is unavailable for receiving messages from.
+	 * @throws SocketException when the socket is already binded.
 	 */
-	public JSON waitFor(String[] keys) throws IOException {
-		//open local buffer
-		HashMap<String, JSON> localBuffer = new HashMap<String, JSON>();
-		buffers.add(localBuffer);
-		return waitFor(keys, localBuffer);
+	protected void connect() throws SocketException {
+		socket = new DatagramSocket(port);
 	}
 	
 	/**
-	 * @see waitFor(String[] keys)
-	 * @param localBuffer - Sent to this private overloading method by the public version
+	 * Close the socket.
 	 */
-	protected JSON waitFor(String[] keys, HashMap<String, JSON> localBuffer) throws IOException {
-		JSON answer = receive();
-		
-		//received an answer - check if it's compatible with one of the requests
-		for (String key : keys) {
-			//the answer is compatible - return it
-			if (answer.getType().equals(key)) {
-				
-				//spread the local buffer's content to all other buffers and delete it
-				for (HashMap<String, JSON> otherBuffer : buffers)
-					if (otherBuffer != localBuffer) otherBuffer.putAll(localBuffer);
-				
-				buffers.remove(localBuffer);
-				return answer;
-			}
-			
-			//the answer is useless - spread it to all other buffers
-			for (HashMap<String, JSON> otherBuffer : buffers)
-				if (otherBuffer != localBuffer && !otherBuffer.containsKey(answer.getType()))
-					otherBuffer.put(answer.getType(), answer);
-		}
-		
-		//check if local buffer has the compatible answer
-		for (String pre : keys) {
-			if (localBuffer.containsKey(pre)) {
-				buffers.remove(localBuffer);
-				return localBuffer.get(pre);
-			}
-		}
-		
-		return waitFor(keys, localBuffer);
-	}
-	
-	/**
-	 * Send a message to the target port and wait until a compatible answer is received.
-	 * As long as the answer is not received, nag the target port and send it the request over and over again.
-	 *  
-	 * @param msg - The request from the target port
-	 * @return an answer for the request.
-	 * @throws IOException when the target port is unavailable.
-	 */
-	public JSON request(JSON msg) throws IOException {
-		//open local buffer
-		HashMap<String, JSON> localBuffer = new HashMap<String, JSON>();
-		buffers.add(localBuffer);
-		
-		return stubbornRequest(msg, localBuffer);
-	}
-	
-	/**
-	 * @see request(String msg)
-	 * @param localBuffer - Sent to this private overloading method by the public version
-	 */
-	protected JSON stubbornRequest(JSON responseTo, HashMap<String, JSON> localBuffer) throws IOException {
-		String expectedType = responseTo.getType();
-		
-		send(responseTo);
-		JSON answer = receive();
-		
-		//check that the answer is compatible with the request
-		if (answer.getType().equals(expectedType)) {
-			//spread the local buffer's content to all other buffers and delete it
-			for (HashMap<String, JSON> otherBuffer : buffers)
-				if (otherBuffer != localBuffer) otherBuffer.putAll(localBuffer);
-			
-			buffers.remove(localBuffer);
-			return answer;
-		}
-		else {
-			//the answer is useless - spread it to all other buffers
-			for (HashMap<String, JSON> otherBuffer : buffers)
-				if (otherBuffer != localBuffer && !otherBuffer.containsKey(answer.getType()))
-					otherBuffer.put(answer.getType(), answer);
-			
-			//check if local buffer has the compatible answer
-			if (localBuffer.containsKey(expectedType)) {
-				buffers.remove(localBuffer);
-				return localBuffer.get(expectedType);
-			}
-			
-			//try again
-			return stubbornRequest(responseTo, localBuffer);
-		}
+	protected void disconnect() {
+		socket.close();
 	}
 	
 	/**
@@ -268,8 +392,23 @@ public class Protocol
 	
 	/**
 	 * @param p - The new port to use
+	 * @throws SocketException 
 	 */
-	public void setPort(int p) { port = p; }
+	public void setPort(int p) throws SocketException {
+		disconnect();
+		port = p;
+		connect();
+	}
+	
+	/**
+	 * Generate a port randomly.
+	 * 
+	 * @throws PortsUnavailableException when no port is available.
+	 * @throws SocketException 
+	 */
+	public void setPort() throws PortsUnavailableException, SocketException {
+		setPort(PortGenerator.nextPort());
+	}
 	
 	/**
 	 * @param p - The new target port to communicate with
