@@ -17,7 +17,7 @@ import javaNK.util.threads.ThreadUtility;
 /**
  * A UDP protocol used for communicating with a server.
  * This class is thread-safe, and can be used by many threads at the same time.
- * It only sends and receives messages in the form of JSON object (also under this package). 
+ * It only sends and receives messages in the form of a JSON object (also under this package).
  * 
  * @see javaNK.util.networking.JSON
  * @author Niv Kor

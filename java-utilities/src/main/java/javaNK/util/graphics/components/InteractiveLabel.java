@@ -1,4 +1,4 @@
-package javaNK.util.graphics;
+package javaNK.util.graphics.components;
 
 import java.awt.Color;
 import java.awt.event.MouseEvent;
