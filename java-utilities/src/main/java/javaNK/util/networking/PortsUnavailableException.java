@@ -1,6 +1,5 @@
 package javaNK.util.networking;
 import java.io.IOException;
-import java.time.DayOfWeek;
 
 /**
  * An exception, thrown when no ports are free for connection.
@@ -14,9 +13,5 @@ public class PortsUnavailableException extends IOException
 	
 	public PortsUnavailableException() {
 		super(MESSAGE);
-	}
-	
-	public static void main(String[] args) {
-		System.out.println(DayOfWeek.FRIDAY.getValue());
 	}
 }

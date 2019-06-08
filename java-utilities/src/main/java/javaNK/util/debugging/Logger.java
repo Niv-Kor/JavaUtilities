@@ -1,4 +1,7 @@
 package javaNK.util.debugging;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.util.Scanner;
 import javaNK.util.math.NumeralHandler;
@@ -10,71 +13,88 @@ public class Logger
 	private static final String POSTFIX = ": ";
 	
 	private static String prefix = "Logger";
-	private static Scanner scan = new Scanner(System.in);
-	private static boolean needNewLine;
+	private static boolean addLine = true;
+	private static InputStream inputSt = System.in;
+	private static OutputStream outputSt = System.out;
+	private static OutputStream errorSt = System.err;
+	private static Scanner scanner = new Scanner(inputSt);
 	
 	/**
 	 * Change the name of the logger, so all logs will be displayed as: "> [name]: [message]".
+	 * Default logger name is "Logger".
+	 * 
 	 * @param name - The name to display
 	 */
-	public static void config(String name) {
-		prefix = new String(name);
+	public static void configName(String name) { prefix = new String(name); }
+	
+	/**
+	 * Set the input stream of the logger.
+	 * Default input stream is System.in.
+	 * 
+	 * @param stream - The input stream to use
+	 */
+	public static void configInputStream(InputStream stream) {
+		inputSt = stream;
+		scanner = new Scanner(stream);
 	}
 	
 	/**
-	 * Print a simple message in the console.
+	 * Set the output stream of the logger.
+	 * Default output stream is System.out.
+	 * 
+	 * @param stream - The output stream to use
+	 */
+	public static void configOutputStream(OutputStream stream) { outputSt = stream; }
+	
+	/**
+	 * Set the error stream of the logger.
+	 * Default error stream is System.err.
+	 * 
+	 * @param stream - The error stream to use
+	 */
+	public static void configErrorStream(OutputStream stream) { errorSt = stream; }
+	
+	/**
+	 * Print a simple message to the output stream.
+	 * 
 	 * @param msg - The message to print
 	 */
 	public static void print(String msg) {
-		//add a new line if needed (after waiting for input and not getting it)
-		if (needNewLine) System.out.println();
-		
-		String period = (msg.charAt(msg.length() - 1) != '.') ? "." : "";
-		System.out.println(timeStamp() + " " + DASH + " " + prefix + POSTFIX + msg + period);
+		print(outputSt, msg);
 	}
 	
 	/**
-	 * Create a new line in the console (recommended for input).
-	 */
-	public static void newLine() {
-		System.out.print(timeStamp() + " " + DASH + " ");
-		needNewLine = true;
-	}
-	
-	public static int inputInt() {
-		newLine();
-		int value = scan.nextInt();
-		needNewLine = false;
-		return value;
-	}
-	
-	public static String inputLine() {
-		newLine();
-		String value = scan.nextLine();
-		needNewLine = false;
-		return value;
-	}
-	
-	/**
-	 * Print an error in the console.
+	 * Print an error to the error stream.
+	 * 
 	 * @param msg - The error message to print
 	 */
 	public static void error(String msg) {
-		newLine();
-		String period = (msg.charAt(msg.length() - 1) != '.') ? "." : "";
-		System.err.println(prefix + POSTFIX + msg + period);
+		print(errorSt, msg);
+	}
+	
+	private static void print(OutputStream output, String msg) {
+		try {
+			if (addLine) output.write(("\n").getBytes());
+			String period = (msg.charAt(msg.length() - 1) != '.') ? "." : "";
+			output.write((timeStamp() + " " + DASH + " " + prefix + POSTFIX + msg + period + "\n").getBytes());;
+			newLine();
+		}
+		catch (IOException e) {}
 	}
 	
 	/**
-	 * Print an error in the console.
+	 * Print an error and its stack trace to the error stream.
+	 * 
 	 * @param msg - The exception to display
 	 */
 	public static void error(Exception e) {
 		error(e.getMessage());
+		e.printStackTrace();
+		newLine();
 	}
 	
 	/**
-	 * print an error in the console, saying that a JSON message was unsuccessful.
+	 * print an error to the error stream, stating that a JSON message was unsuccessful.
 	 * 
 	 * @param msg - The JSON message that was received
 	 * @param reason - The reason for the error
@@ -84,7 +104,44 @@ public class Logger
 		error("Unsuccessful command '" + message + "', " + reason + ".");
 	}
 	
-	/*
+	/**
+	 * Create a new line in the output stream (recommended for the entry of input).
+	 */
+	public static void newLine() {
+		try {
+			outputSt.write((timeStamp() + " " + DASH + " ").getBytes());
+			addLine = true;
+		}
+		catch (IOException e) {}
+	}
+	
+	/**
+	 * Input an integer value.
+	 * 
+	 * @return the entered value, or -1 if the value is not a legal integer.
+	 */
+	public static int inputInt() {
+		int value;
+		
+		try { value = scanner.nextInt(); }
+		catch (NumberFormatException e) { return -1; }
+		
+		addLine = false;
+		return value;
+	}
+	
+	/**
+	 * Input a String value.
+	 * 
+	 * @return the entered value.
+	 */
+	public static String inputLine() {
+		String value = scanner.nextLine();
+		addLine = false;
+		return value;
+	}
+	
+	/**
 	 * Create a time stamp of the current hour:minutes:seconds:milliseconds.
 	 */
 	private static String timeStamp() {

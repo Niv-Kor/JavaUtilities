@@ -113,6 +113,19 @@ public class JSON extends JSONObject
 	}
 	
 	/**
+	 * Get an array of Strings from the message.
+	 * 
+	 * @param key - The key that's assigned to the desired value
+	 * @return the value as an array of String objects.
+	 */
+	public String[] getStringArray(String key) {
+		String value = getString(key);
+		if (value.equals("^")) return new String[] {};
+		else return value.split("^");
+		
+	}
+	
+	/**
 	 * Get a boolean value from the message.
 	 * 
 	 * @param key - The key that's assigned to the desired value
@@ -120,6 +133,27 @@ public class JSON extends JSONObject
 	 */
 	public boolean getBoolean(String key) {
 		return Boolean.parseBoolean(getString(key));
+	}
+	
+	/**
+	 * Put an array of Strings.
+	 * 
+	 * @param key - The key of the field
+	 * @param array - Array of String objects
+	 */
+	public void putArray(String key, String[] array) {
+		if (array == null) {
+			put(key, "^");
+			return;
+		}
+		
+		String arrayStr = "";
+		for (int i = 0; i < array.length; i++) {
+			arrayStr = arrayStr.concat(array[i]);
+			if (i < array.length - 1) arrayStr = arrayStr.concat("^");
+		}
+		
+		put(key, arrayStr);
 	}
 	
 	@Override

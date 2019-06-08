@@ -6,94 +6,86 @@ import java.util.List;
 import java.util.Queue;
 
 import javaNK.util.debugging.Logger;
+import javaNK.util.threads.DiligentThread;
 
 /**
  * This class collects all messages that are continuously received by a protocol,
- * and matches each message with a compatible, pre-defined algorithm.
+ * and matches each message with a compatible, predefined algorithm.
  * That algorithm is then executed after the message's arrival.
  * 
  * @author Niv Kor
  */
-public abstract class ResponseEngine implements Runnable
+public abstract class ResponseEngine extends DiligentThread
 {
-	/**
-	 * This interface cooperates with ResponseEngine,
-	 * in a way that it represents a case that should be responded.
-	 * It provides the message type to respond to, and an algorithm that
-	 * will be executed when the above message arrives.
-	 *  
-	 * @author Niv Kor
-	 */
-	public static interface ResponseCase
-	{
-		/**
-		 * Get the type of the message this case responds to.
-		 * It can only respond to one message type.
-		 * 
-		 * @return the type of the message to respond to.
-		 */
-		String getType();
-		
-		/**
-		 * An algorithm to be excecuted when the correct message arrives.
-		 * 
-		 * @param msg - The message that triggered this method
-		 * @throws Exception when something goes wrong with the algorithm.
-		 */
-		void respond(JSON msg) throws Exception;
-	}
-	
 	/**
 	 * This class is responsible for handling the messages that ResponseEngine collects.
 	 * Whenever a message is sent to the executor, it searches the message's case
-	 * and excecutes the algorithm that's definesd there.
+	 * and executes the algorithm that's defined there.
 	 * 
 	 * @author Niv Kor
 	 */
-	protected static class ResponseExcecutor implements Runnable
+	protected static class ResponseExcecutor extends DiligentThread
 	{
 		protected volatile List<ResponseCase> services;
 		protected volatile Queue<JSON> messages;
+		protected volatile boolean running;
 		
 		/**
 		 * @param messages - Queue of messages that had been received in ResponseEngine
-		 * @param services - List of cases that were pre-defined in ResponseEngine's initCases()
+		 * @param services - List of cases that were predefined in ResponseEngine's initCases()
 		 */
 		public ResponseExcecutor(Queue<JSON> messages, List<ResponseCase> services) {
+			super(0.008);
 			this.messages = messages;
 			this.services = services;
 		}
 		
 		@Override
-		public void run() {
-			while(true) {
-				if (!messages.isEmpty()) {
-					JSON msg = messages.poll();
-					
-					//check again, in case of a multithreading problem
-					if (msg != null) {
-						for (int i = 0; i < services.size(); i++) {
-							ResponseCase service = services.get(i);
-							
-							if (msg.getType().equals(service.getType())) {
-								try { service.respond(msg); }
-								catch (Exception e) {}
-							}
-						}
+		protected void diligentFunction() throws Exception {
+			if (!messages.isEmpty()) {
+				JSON msg = messages.poll();
+				
+				//check again, in case of a multithreading problem
+				if (msg != null) {
+					for (int i = 0; i < services.size(); i++) {
+						ResponseCase service = services.get(i);
+						
+						//find the correct response to perform
+						if (msg.getType().equals(service.getType()))
+							service.respond(msg);
 					}
 				}
-				
-				try { Thread.sleep(8); }
-				catch(InterruptedException e) {}
 			}
 		}
 	}
 	
+	protected static class NecroAnnouncer extends DiligentThread
+	{
+		protected Protocol protocol;
+		protected ResponseEngine engine;
+		protected volatile boolean running;
+		
+		/**
+		 * @param engine - The main ResponseEngine object
+		 */
+		public NecroAnnouncer(ResponseEngine engine) {
+			super(5);
+			this.engine = engine;
+			this.protocol = engine.getProtocol();
+		}
+		
+		@Override
+		protected void diligentFunction() throws Exception {
+			if (!protocol.requestLivingAck() && running) engine.targetDied();
+		}
+	}
+	
 	protected Protocol protocol;
-	protected ResponseExcecutor responder;
+	protected ResponseExcecutor executor;
+	protected NecroAnnouncer necro;
+	protected String[] keyArr;
 	protected List<String> caseKeys;
-	protected volatile boolean running;
-	protected volatile List<ResponseCase> services;
+	protected List<ResponseCase> services;
 	protected volatile Queue<JSON> messages;
 	
 	/**
@@ -103,42 +95,30 @@ public abstract class ResponseEngine implements Runnable
 	 * with the argument port already exists, a BindException will be thrown.
 	 * 
 	 * @param port - The port to listen to
+	 * @param checkDeath - True to regularly check if the target port is still alive
 	 * @throws IOException when the protocol is unavailable.
 	 */
-	public ResponseEngine(int port) throws IOException {
-		this(new Protocol(port));
+	public ResponseEngine(int port, boolean checkDeath) throws IOException {
+		this(new Protocol(port), checkDeath);
 	}
 	
 	/**
 	 * Create an object with an existing protocol.
 	 * 
 	 * @param protocol - The protocol to use to receive messages
+	 * @param checkDeath - True to regularly check if the target port is still alive
 	 * @throws IOException when the protocol is unavailable.
 	 */
-	public ResponseEngine(Protocol protocol) throws IOException {
+	public ResponseEngine(Protocol protocol, boolean checkDeath) throws IOException {
 		this.protocol = protocol;
 		this.caseKeys = new ArrayList<String>();
 		this.services = new ArrayList<ResponseCase>();
 		this.messages = new LinkedList<JSON>();
-		this.responder = new ResponseExcecutor(messages, services);
-		initCases();
-		new Thread(responder).start();
-	}
-	
-	@Override
-	public void run() {
-		String[] keyArr = caseKeys.toArray(new String[caseKeys.size()]);
-		running = true;
 		
-		while (true) {
-			while (running) {
-				try { handle(protocol.waitFor(keyArr)); }
-				catch(IOException e) {
-					Logger.error("Server error");
-					e.printStackTrace();
-				}
-			}
-		}
+		this.executor = new ResponseExcecutor(messages, services);
+		if (checkDeath) this.necro = new NecroAnnouncer(this);
+		
+		initCases();
 	}
 	
 	/**
@@ -158,18 +138,59 @@ public abstract class ResponseEngine implements Runnable
 	protected void addCase(ResponseCase resCase) {
 		services.add(resCase);
 		caseKeys.add(resCase.getType());
+		keyArr = caseKeys.toArray(new String[caseKeys.size()]);
 	}
 	
 	/**
-	 * Pause the engine.
-	 * 
-	 * @param flag - True to pause or false to resume
+	 * @return the protocol this engine uses.
 	 */
-	public void pause(boolean flag) { running = !flag; }
+	public Protocol getProtocol() { return protocol; }
 	
 	/**
 	 * Initiate all of the engine's cases.
 	 * Use at least one addCase(ResposeCase) in this method.
 	 */
 	protected abstract void initCases();
+	
+	/**
+	 * Pause all running threads as a result of the target port's death.
+	 */
+	protected void targetDied() {
+		executor.pause(true);
+		if (necro != null) necro.pause(true);
+		pause(true);
+	}
+	
+	@Override
+	protected void diligentFunction() throws Exception {
+		try { handle(protocol.waitFor(keyArr)); }
+		catch (IOException e) {
+			Logger.error("Server error");
+			e.printStackTrace();
+		}
+	}
+	
+	@Override
+	public void start() {
+		super.start();
+		executor.start();
+		if (necro != null) necro.start();
+	}
+	
+	@Override
+	public void pause(boolean flag) {
+		super.pause(flag);
+		
+		if (flag) {
+			try { protocol.flush(); }
+			catch (IOException e) {}
+		}
+	}
+	
+	@Override
+	public void kill() {
+		super.kill();
+		executor.kill();
+		if (necro != null) necro.kill();
+	}
 }
