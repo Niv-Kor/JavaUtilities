@@ -6,28 +6,24 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 
 public class ImageHandler extends FileLoader
 {
+	private static Map<Object, String> memory = new HashMap<Object, String>();
+	
 	/**
 	 * Load a BufferedImage object from resources folder.
 	 * @param path - Full logic path of the file (including file type ending)
 	 * @return a BufferedImage object.
 	 */
 	public static BufferedImage loadImage(String path) {
-		path = HEADER_PATH + path;
-		BufferedImage image = null;
-
-		try	{
-			File file = new File(path);
-			InputStream fis = new FileInputStream(file);
-			return ImageIO.read(fis);
-		}
-		catch (Exception e) { error("image", path, e); }
-		
+		BufferedImage image = load(path);
+		memory.put(image, path);
 		return image;
 	}
 	
@@ -37,14 +33,30 @@ public class ImageHandler extends FileLoader
 	 * @return an ImageIcon object.
 	 */
 	public static ImageIcon loadIcon(String path) {
-		return new ImageIcon(loadImage(path));
+		ImageIcon icon = new ImageIcon(load(path));
+		memory.put(icon, path);
+		return icon;
+	}
+	
+	private static BufferedImage load(String path) {
+		path = HEADER_PATH + path;
+
+		try	{
+			File file = new File(path);
+			InputStream fis = new FileInputStream(file);
+			BufferedImage image = ImageIO.read(fis);
+			return image;
+		}
+		catch (Exception e) { error("image", path, e); }
+		
+		return null;
 	}
 	
 	/**
 	 * Create an image in resources folder.
 	 * @param image - BufferedImage object that was created during runtime
 	 * @param path - Where to save the image
-	 * @return true if the image was created successfuly or false otherwise.
+	 * @return true if the image was created successfully or false otherwise.
 	 */
 	public static boolean create(BufferedImage image, String path) {
 		path = HEADER_PATH + path;
@@ -91,6 +103,14 @@ public class ImageHandler extends FileLoader
 		BufferedImage sourceImage = (BufferedImage) source.getImage();
 		return new ImageIcon(cloneImage(sourceImage));
 	}
+	
+	/**
+	 * Get the absolute path of an image that was previously loaded via the ImageHandler.
+	 * 
+	 * @param image - The image to get the path of
+	 * @return the absolute path of the image.
+	 */
+	public static String getPath(Object image) { return memory.get(image); }
 	
 	/**
 	 * Check if one image equals another (by every pixel).

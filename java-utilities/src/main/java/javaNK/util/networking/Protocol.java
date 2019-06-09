@@ -505,7 +505,6 @@ public class Protocol
 		byte[] data = msg.toString().getBytes();
 		DatagramPacket packet = new DatagramPacket(data, data.length, serverAddress, remotePort);
 		socket.send(packet);
-		//System.out.println("sent " + msg);
 	}
 	
 	/**
@@ -517,13 +516,11 @@ public class Protocol
 	 * @throws IOException when the target port is unavailable for receiving messages from.
 	 */
 	public JSON receive() throws IOException {
-		byte[] data = new byte[1024];
+		byte[] data = new byte[2024];
 		DatagramPacket packet = new DatagramPacket(data, data.length);
 		socket.receive(packet);
 		String message = new String(packet.getData(), 0, packet.getLength());
-		JSON json = new JSON(message);
-		//System.out.println("received " + json);
-		return json;
+		return new JSON(message);
 	}
 	
 	/**

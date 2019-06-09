@@ -75,9 +75,7 @@ public class Logger
 	private static void print(OutputStream output, String msg) {
 		try {
 			if (addLine) output.write(("\n").getBytes());
-			String period = (msg.charAt(msg.length() - 1) != '.') ? "." : "";
-			output.write((timeStamp() + " " + DASH + " " + prefix + POSTFIX + msg + period + "\n").getBytes());;
-			newLine();
+			output.write((timeStamp() + " " + DASH + " " + prefix + POSTFIX + msg + "\n").getBytes());
 		}
 		catch (IOException e) {}
 	}
@@ -90,7 +88,6 @@ public class Logger
 	public static void error(Exception e) {
 		error(e.getMessage());
 		e.printStackTrace();
-		newLine();
 	}
 	
 	/**
@@ -121,6 +118,7 @@ public class Logger
 	 * @return the entered value, or -1 if the value is not a legal integer.
 	 */
 	public static int inputInt() {
+		newLine();
 		int value;
 		
 		try { value = scanner.nextInt(); }
@@ -136,7 +134,8 @@ public class Logger
 	 * @return the entered value.
 	 */
 	public static String inputLine() {
-		String value = scanner.nextLine();
+		newLine();
+		String value = scanner.next();
 		addLine = false;
 		return value;
 	}

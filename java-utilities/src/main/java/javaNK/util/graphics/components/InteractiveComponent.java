@@ -44,7 +44,7 @@ public abstract class InteractiveComponent extends JLabel implements MouseListen
 	
 	@Override
 	public void mousePressed(MouseEvent e) {
-		if (func != null) {
+		if (func != null && funcEnabled) {
 			try { func.call(); }
 			catch (Exception ex) { ex.printStackTrace(); }
 		}
@@ -57,7 +57,7 @@ public abstract class InteractiveComponent extends JLabel implements MouseListen
 	public void mouseReleased(MouseEvent arg0) {}
 	
 	@Override
-	public void mouseEntered(MouseEvent e) { hovered = true; }
+	public void mouseEntered(MouseEvent e) { hovered = hoverEnabled; }
 	
 	@Override
 	public void mouseExited(MouseEvent e) { hovered = false; }

@@ -30,17 +30,15 @@ public class InteractiveIcon extends InteractiveComponent implements MouseListen
 	}
 	
 	@Override
-	public void mouseEntered(MouseEvent arg0) {
-		if (selectedIcon != null) super.setIcon(selectedIcon);
-		revalidate();
-		repaint();
+	public void mouseEntered(MouseEvent e) {
+		super.mouseEntered(e);
+		if (hovered && selectedIcon != null) super.setIcon(selectedIcon);
 	}
 	
 	@Override
-	public void mouseExited(MouseEvent arg0) {
+	public void mouseExited(MouseEvent e) {
+		super.mouseEntered(e);
 		if (getIcon() != icon) super.setIcon(icon);
-		revalidate();
-		repaint();
 	}
 	
 	/**

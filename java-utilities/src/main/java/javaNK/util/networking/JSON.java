@@ -4,8 +4,8 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
 /**
- * This class modifies JSONObject objects, and eases their useability.
- * Every JSON message holds 
+ * This class modifies JSONObject objects, and eases their usability.
+ * Every JSON message contains a "type" field, which is determined during construction.
  * 
  * @author Niv Kor
  */
@@ -20,12 +20,23 @@ public class JSON extends JSONObject
 	 * 				If converting a String to a JSON object - this argument is the string to convert.
 	 */
 	public JSON(String str) {
-		if (str.charAt(0) == '{') initConversion(str);
+		if (str.charAt(0) == '{') convert(str);
 		else initNew(str);
+	}
+	
+	private JSON(String str, boolean decode) {
+		str = str.replace("L*E*F*T", "{")
+				 .replace("R*I*G*H*T", "}")
+				 .replace("C*O*L*N", ":")
+				 .replace("Q*U*T", "\"")
+				 .replace("C*O*M*A", ",");
+		
+		convert(str);
 	}
 	
 	/**
 	 * Initiate a new JSON object.
+	 * 
 	 * @param title - The message type
 	 */
 	protected void initNew(String title) {
@@ -33,13 +44,13 @@ public class JSON extends JSONObject
 	}
 	
 	/**
-	 * Convert a String to JSON.
+	 * Convert a String to JSON object.
+	 * 
 	 * @param message - The String to convert
 	 */
-	protected void initConversion(String message) {
+	protected void convert(String message) {
 		JSONParser parser = new JSONParser();
 		try {
-			//parse the message into a JSONObject
 			JSONObject obj = (JSONObject) parser.parse(message);
 			
 			//split the rows to an array
@@ -65,6 +76,12 @@ public class JSON extends JSONObject
 	@SuppressWarnings("unchecked")
 	public Object put(String key, Object value) {
 		return super.put(key, value);
+	}
+	
+	@SuppressWarnings("unchecked")
+	public void putJSON(String key, JSON value) {
+		value.replace("\"", "Q*U*T");
+		put(key, value.encode());
 	}
 	
 	/**
@@ -109,7 +126,17 @@ public class JSON extends JSONObject
 	 * @return the value as a String object.
 	 */
 	public String getString(String key) {
-		return (String) get(key);
+		return (String) get(key).toString();
+	}
+	
+	/**
+	 * Get a JSON object as value from the message.
+	 * 
+	 * @param key - The key that's assigned to the desired value
+	 * @return the value as a JSON object.
+	 */
+	public JSON getJSON(String key) {
+		return new JSON(getString(key), true);
 	}
 	
 	/**
@@ -122,7 +149,6 @@ public class JSON extends JSONObject
 		String value = getString(key);
 		if (value.equals("^")) return new String[] {};
 		else return value.split("^");
-		
 	}
 	
 	/**
@@ -154,6 +180,17 @@ public class JSON extends JSONObject
 		}
 		
 		put(key, arrayStr);
+	}
+	
+	private String encode() {
+		String encoded = toJSONString().
+						 replace(":", "C*O*L*N").
+						 replace("{", "L*E*F*T").
+						 replace("}", "R*I*G*H*T").
+						 replace("\"", "Q*U*T").
+						 replace(",", "C*O*M*A");
+		
+		return encoded;
 	}
 	
 	@Override
