@@ -1,5 +1,4 @@
 package javaNK.util.math;
-import java.awt.Dimension;
 
 public class Percentage
 {
@@ -53,11 +52,5 @@ public class Percentage
 		if (num > effectModel.getMax().doubleValue()) return effectModel.getMax().doubleValue();
 		else if (num < effectModel.getMin().doubleValue()) return effectModel.getMin().doubleValue();
 		else return num;
-	}
-	
-	public static Dimension createDimension(Dimension source, double widthPercent, double heightPercent) {
-		int width = (int) percentOfNum(widthPercent, source.width);
-		int height = (int) percentOfNum(heightPercent, source.height);
-		return new Dimension(width, height);
 	}
 }

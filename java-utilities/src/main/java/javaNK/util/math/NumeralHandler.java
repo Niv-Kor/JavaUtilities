@@ -6,9 +6,10 @@ public class NumeralHandler
 {
 	/**
 	 * Round a decimal number to a fixed number of places after the point.
+	 * 
 	 * @param value - The number to round
 	 * @param places - Amount of places after the point to show
-	 * @return a rounded deciaml number.
+	 * @return a rounded decimal number.
 	 */
 	public static double round(double value, int places) {
 	    if (places < 0) throw new IllegalArgumentException();
@@ -20,6 +21,7 @@ public class NumeralHandler
 	
 	/**
 	 * Round an integer to a fixed number of digits.
+	 * 
 	 * @param value - The number to round
 	 * @param places - Amount of digits to show
 	 * @return a rounded integer.
@@ -30,6 +32,7 @@ public class NumeralHandler
 	
 	/**
 	 * Count the amount of digits in a number.
+	 * 
 	 * @param num - The number to count
 	 * @return the amount of digits in the number.
 	 */
@@ -44,5 +47,26 @@ public class NumeralHandler
 		}
 		
 		return counter;
+	}
+	
+	/**
+	 * Shift an integer number to the right, adding '0's to its left side.
+	 * If the number has more digits than requested, digits from the right will be removed instead. 
+	 * 
+	 * @param number - Integer number to shift right
+	 * @param spaces - The amount of digits it should possess
+	 * @return a String object of the number, with the exact amount of digits specified.
+	 */
+	public static String shiftRight(int number, int spaces) {
+		int digits = countDigits(number);
+		String str = "" + number;
+		
+		if (digits == spaces) return str;
+		else if (digits > spaces) return str.substring(0, spaces);
+		else
+			for (int i = 0; i < spaces - digits; i++)
+				str = "0" + str;
+		
+		return str;
 	}
 }
