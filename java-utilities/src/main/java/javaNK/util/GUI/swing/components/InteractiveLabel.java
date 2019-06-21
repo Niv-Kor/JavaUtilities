@@ -1,4 +1,4 @@
-package javaNK.util.graphics.components;
+package javaNK.util.GUI.swing.components;
 
 import java.awt.Color;
 import java.awt.event.MouseEvent;
@@ -51,9 +51,8 @@ public class InteractiveLabel extends InteractiveComponent implements MouseListe
 	@Override
 	public void mousePressed(MouseEvent e) {
 		super.mousePressed(e);
-		
 		clicked = !clicked;
-		if (enableSelection) super.setForeground(selectColor);
+		select();
 	}
 	
 	/**
@@ -78,6 +77,13 @@ public class InteractiveLabel extends InteractiveComponent implements MouseListe
 	public void release() {
 		clicked = false;
 		setForeground(originColor);
+	}
+	
+	/**
+	 * Apply a selection color to the label.
+	 */
+	public void select() {
+		if (enableSelection) super.setForeground(selectColor);
 	}
 	
 	/**

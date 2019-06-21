@@ -1,4 +1,4 @@
-package javaNK.util.graphics.components;
+package javaNK.util.GUI.swing.components;
 
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
@@ -56,9 +56,23 @@ public class InteractiveIcon extends InteractiveComponent implements MouseListen
 	}
 	
 	/**
+	 * @param hoverIcon - The new selected icon
+	 */
+	public void setHoverIcon(ImageIcon hoverIcon) {
+		setSelectedIcon(hoverIcon);
+	}
+	
+	/**
 	 * @param icon - The new selected icon to show
 	 */
 	public void setSelectedIcon(ImageIcon icon) {
 		selectedIcon = icon;
+	}
+	
+	/**
+	 * @param icon - The new selected icon to show
+	 */
+	public void setSelectedIcon(String iconPath) {
+		setSelectedIcon(ImageHandler.loadIcon(iconPath));
 	}
 }

@@ -1,4 +1,4 @@
-package javaNK.util.graphics.components;
+package javaNK.util.GUI.swing.components;
 
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
