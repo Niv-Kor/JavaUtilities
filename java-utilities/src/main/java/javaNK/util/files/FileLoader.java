@@ -11,7 +11,7 @@ public abstract class FileLoader
 	
 	/**
 	 * Verify a file's availability by trying to load it.
-	 * Use this method if you don't want to check wether the "load()" method returns null or not.
+	 * Use this method if you don't want to check whether the "load()" method returns null or not.
 	 * @param path - Full login path of the file
 	 * @return true if the file is able to be loaded of false if not.
 	 */
