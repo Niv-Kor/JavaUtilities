@@ -1,4 +1,4 @@
-package javaNK.util.graphics;
+package javaNK.util.GUI;
 import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Composite;
@@ -26,16 +26,16 @@ import java.awt.image.renderable.RenderableImage;
 import java.text.AttributedCharacterIterator;
 import java.util.Map;
 
-import javaNK.util.graphics.dimensional.Point;
+import javaNK.util.GUI.geometric_2D.Point;
 import javaNK.util.math.Percentage;
 import javaNK.util.math.Range;
 
-public class CustomGraphics extends Graphics
+public class QuillPen extends Graphics
 {
 	private Composite originComposite;
 	private Graphics2D g;
 	
-	public CustomGraphics(Graphics2D g) {
+	public QuillPen(Graphics2D g) {
 		this.g = g;
 	}
 	

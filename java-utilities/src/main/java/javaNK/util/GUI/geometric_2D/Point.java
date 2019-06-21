@@ -1,4 +1,4 @@
-package javaNK.util.graphics.dimensional;
+package javaNK.util.GUI.geometric_2D;
 import java.awt.geom.Point2D;
 
 /**

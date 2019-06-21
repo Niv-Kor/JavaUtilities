@@ -1,9 +1,10 @@
-package javaNK.util.graphics.dimensional;
+package javaNK.util.GUI.geometric_2D;
 import java.awt.Dimension;
 import java.awt.Polygon;
 import java.awt.geom.Area;
 import java.awt.image.BufferedImage;
-import javaNK.util.graphics.CustomGraphics;
+
+import javaNK.util.GUI.QuillPen;
 
 /**
  * This class represents a shape on the plane, having both size and location.
@@ -635,5 +636,5 @@ public class Collider implements Graphable
 	public void update(double delta) {}
 	
 	@Override
-	public void render(CustomGraphics g) {}
+	public void render(QuillPen g) {}
 }

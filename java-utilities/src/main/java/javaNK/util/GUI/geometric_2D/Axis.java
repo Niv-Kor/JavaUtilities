@@ -1,4 +1,4 @@
-package javaNK.util.graphics.dimensional;
+package javaNK.util.GUI.geometric_2D;
 
 /**
  * This enum represents the axles in the space.

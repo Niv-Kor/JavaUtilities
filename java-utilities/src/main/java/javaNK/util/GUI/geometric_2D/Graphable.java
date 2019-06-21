@@ -1,11 +1,12 @@
-package javaNK.util.graphics.dimensional;
+package javaNK.util.GUI.geometric_2D;
 import java.awt.Dimension;
-import javaNK.util.graphics.CustomGraphics;
+
+import javaNK.util.GUI.QuillPen;
 
 public interface Graphable
 {
 	public void update(double delta);
-	public void render(CustomGraphics g);
+	public void render(QuillPen g);
 	public void setDimension(Dimension d);
 	public Dimension getDimension();
 	public Point getPoint();
