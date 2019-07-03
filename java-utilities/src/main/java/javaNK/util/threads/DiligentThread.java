@@ -1,6 +1,12 @@
 package javaNK.util.threads;
 
-public abstract class DiligentThread extends Thread
+/**
+ * A thread that performs the same action periodically,
+ * with a certain and specified delay in between executions. 
+ * 
+ * @author Niv Kor
+ */
+public abstract class DiligentThread extends Thread implements Handleable
 {
 	protected long rest;
 	protected volatile boolean running;
@@ -22,7 +28,7 @@ public abstract class DiligentThread extends Thread
 		while (true) {
 			if (running) {
 				try { diligentFunction(); }
-				catch (Exception e) {}
+				catch (Exception e) { handleException(e); }
 				
 				try { Thread.sleep(rest); }
 				catch (InterruptedException e1) { if (!running) return; }
@@ -72,4 +78,7 @@ public abstract class DiligentThread extends Thread
 		interrupt();
 		dead = true;
 	}
+	
+	@Override
+	public void handleException(Exception e) { e.printStackTrace(); }
 }

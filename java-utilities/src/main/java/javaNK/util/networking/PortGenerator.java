@@ -16,14 +16,15 @@ import javaNK.util.math.Range;
  */
 public class PortGenerator
 {
-	private static final int MIN_PORT = 1024;
-	private static final int MAX_PORT = (int) Character.MAX_VALUE;
+	private static final int MIN_PORT = (int) Math.pow(2, 10);
+	private static final int MAX_PORT = (int) Math.pow(2, 16);
 	private static final Range<Integer> LEGAL_RANGE = new Range<Integer>(MIN_PORT, MAX_PORT);
 	
 	private static Map<String, Integer> allocatedPorts = new HashMap<String, Integer>();
 	
 	/**
 	 * Generate an available port number, ready for connection.
+	 * 
 	 * @return a free port number.
 	 */
 	public static int nextPort() throws PortsUnavailableException {
@@ -48,6 +49,7 @@ public class PortGenerator
 	
 	/**
 	 * Test a connection to a port.
+	 * 
 	 * @param port - The port to test
 	 * @return true if the connection was successful.
 	 */
@@ -63,6 +65,16 @@ public class PortGenerator
 	}
 	
 	/**
+	 * Check if a port is legal (normally between 2^10 and 2^16).
+	 * 
+	 * @param port - The port to check
+	 * @return true if the port is legal for use.
+	 */
+	public static boolean isLegal(int port) {
+		return LEGAL_RANGE.intersects(port);
+	}
+	
+	/**
 	 * Allocate a port number for later use,
 	 * so when generating a free port number, it wont be any of the allocated ones.
 	 * 
@@ -71,7 +83,7 @@ public class PortGenerator
 	 * @return true if the allocation was successful.
 	 */
 	public static boolean allocate(String name, int port) {
-		if (LEGAL_RANGE.intersects(port)) {
+		if (isLegal(port)) {
 			allocatedPorts.put(name, port);
 			return true;
 		}

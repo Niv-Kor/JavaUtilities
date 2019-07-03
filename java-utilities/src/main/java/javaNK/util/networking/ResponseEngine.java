@@ -1,12 +1,10 @@
 package javaNK.util.networking;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
-
 import javaNK.util.debugging.Logger;
 import javaNK.util.threads.DiligentThread;
+import javaNK.util.threads.SpoolingThread;
 
 /**
  * This class collects all messages that are continuously received by a protocol,
@@ -24,37 +22,27 @@ public abstract class ResponseEngine extends DiligentThread
 	 * 
 	 * @author Niv Kor
 	 */
-	protected static class ResponseExcecutor extends DiligentThread
+	protected static class ResponseExcecutor extends SpoolingThread<JSON>
 	{
 		protected volatile List<ResponseCase> services;
-		protected volatile Queue<JSON> messages;
 		protected volatile boolean running;
 		
 		/**
 		 * @param messages - Queue of messages that had been received in ResponseEngine
 		 * @param services - List of cases that were predefined in ResponseEngine's initCases()
 		 */
-		public ResponseExcecutor(Queue<JSON> messages, List<ResponseCase> services) {
-			super(0.008);
-			this.messages = messages;
+		public ResponseExcecutor(List<ResponseCase> services) {
 			this.services = services;
 		}
 		
 		@Override
-		protected void diligentFunction() throws Exception {
-			if (!messages.isEmpty()) {
-				JSON msg = messages.poll();
+		protected void spoolingFunction(JSON node) throws Exception {
+			for (int i = 0; i < services.size(); i++) {
+				ResponseCase service = services.get(i);
 				
-				//check again, in case of a multithreading problem
-				if (msg != null) {
-					for (int i = 0; i < services.size(); i++) {
-						ResponseCase service = services.get(i);
-						
-						//find the correct response to perform
-						if (msg.getType().equals(service.getType()))
-							service.respond(msg);
-					}
-				}
+				//find the correct response to perform
+				if (node.getType().equals(service.getType()))
+					service.respond(node);
 			}
 		}
 	}
@@ -86,20 +74,19 @@ public abstract class ResponseEngine extends DiligentThread
 	protected String[] keyArr;
 	protected List<String> caseKeys;
 	protected List<ResponseCase> services;
-	protected volatile Queue<JSON> messages;
 	
 	/**
 	 * Construct an object with a new protocol.
 	 * 
-	 * WARNING: this constructor creates a new protocol, which means that if a protocol
-	 * with the argument port already exists, a BindException will be thrown.
+	 * WARNING: this constructor creates a new protocol, which means that if
+	 * the argument network information's local port is already binded, a BindException will be thrown.
 	 * 
-	 * @param port - The port to listen to
+	 * @param targetInformation - The network information of the target host
 	 * @param checkDeath - True to regularly check if the target port is still alive
 	 * @throws IOException when the protocol is unavailable.
 	 */
-	public ResponseEngine(int port, boolean checkDeath) throws IOException {
-		this(new Protocol(port), checkDeath);
+	public ResponseEngine(NetworkInformation targetInformation, boolean checkDeath) throws IOException {
+		this(new Protocol(targetInformation), checkDeath);
 	}
 	
 	/**
@@ -113,9 +100,8 @@ public abstract class ResponseEngine extends DiligentThread
 		this.protocol = protocol;
 		this.caseKeys = new ArrayList<String>();
 		this.services = new ArrayList<ResponseCase>();
-		this.messages = new LinkedList<JSON>();
 		
-		this.executor = new ResponseExcecutor(messages, services);
+		this.executor = new ResponseExcecutor(services);
 		if (checkDeath) this.necro = new NecroAnnouncer(this);
 		
 		initCases();
@@ -127,7 +113,7 @@ public abstract class ResponseEngine extends DiligentThread
 	 * @param msg - The message to send forward to the executor
 	 */
 	protected void handle(JSON msg) {
-		messages.add(msg);
+		executor.enqueue(msg);
 	}
 	
 	/**

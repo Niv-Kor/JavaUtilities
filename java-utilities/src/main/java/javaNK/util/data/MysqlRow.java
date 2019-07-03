@@ -1,61 +1,21 @@
 package javaNK.util.data;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import javaNK.util.debugging.Logger;
 
-public abstract class MysqlDataRow
+public abstract class MysqlRow
 {
-	protected static abstract class DataField
-	{
-		Object classMember;
-		
-		public DataField() {
-			this.classMember = classMember();
-		}
-		
-		/**
-		 * Get the value as it's suppose to be written inside a query.
-		 * Apostrophes will be added when needed. 
-		 * 
-		 * @return the value of the field as a String object, fit for any query.
-		 */
-		public String value() {
-			Object value = classMember();
-			String apostrophe = "'";
-			String valueStr;
-			
-			if (classMember() instanceof String || classMember instanceof Timestamp)
-				valueStr = apostrophe + value.toString() + apostrophe;
-			else
-				valueStr = value.toString();
-			
-			return valueStr;
-		}
-		
-		/**
-		 * @return the name of the field as written in the data base.
-		 */
-		public abstract String mysqlName();
-		
-		/**
-		 * Get the actual variable that's a mutable and modifiable object.
-		 * When calling the save() method, it's using the class members' values.
-		 * 
-		 * WARNING: You must provide an Object in order for the class to do it's job properly.
-		 * 			If the data member is of primitive type, use wrapping instead!  
-		 * 
-		 * @return the variable that represents the data in the data base row.
-		 */
-		protected abstract Object classMember();
-	}
+	private List<MysqlData> keyFields, liquidFields;
+	private String tableName;
 	
-	private List<DataField> keyFields, liquidFields;
-	
-	public MysqlDataRow() {
-		this.keyFields = new ArrayList<DataField>();
-		this.liquidFields = new ArrayList<DataField>();
+	/**
+	 * @param tableName - The name of the table that contains the row
+	 */
+	public MysqlRow(String tableName) {
+		this.tableName = new String(tableName);
+		this.keyFields = new ArrayList<MysqlData>();
+		this.liquidFields = new ArrayList<MysqlData>();
 		addFields();
 	}
 	
@@ -67,21 +27,21 @@ public abstract class MysqlDataRow
 	 */
 	public boolean save() {
 		String query;
-		DataField tempField;
+		MysqlData tempField;
 		
 		if (isInDatabase()) {
-			query = "UPDATE " + tableName() + " SET ";
+			query = "UPDATE IGNORE " + tableName + " SET ";
 			
 			for (int i = 0; i < liquidFields.size(); i++) {
 				tempField = liquidFields.get(i);
-				query = query.concat(tempField.mysqlName() + " = " + tempField.value() + " ");
+				query = query.concat(tempField.getColumn().getName() + " = " + tempField.getQueryValue() + " ");
 				
 				if (i < liquidFields.size() - 1) query = query.concat(", ");
 				else query = query.concat(keyCondition());
 			}
 		}
 		else {
-			query = "INSERT INTO " + tableName() + "(";
+			query = "INSERT IGNORE INTO " + tableName + "(";
 			int fieldsAmount;
 			
 			/*
@@ -90,18 +50,18 @@ public abstract class MysqlDataRow
 			fieldsAmount = keyFields.size() + liquidFields.size();
 			
 			//key fields
-			for (DataField field : keyFields) {
+			for (MysqlData field : keyFields) {
 				fieldsAmount--;
-				query = query.concat(field.mysqlName());
+				query = query.concat(field.getColumn().getName());
 				
 				if (fieldsAmount > 0) query = query.concat(", ");
 				else query = query.concat(") VALUES (");
 			}
 			
 			//liquid fields
-			for (DataField field : liquidFields) {
+			for (MysqlData field : liquidFields) {
 				fieldsAmount--;
-				query = query.concat(field.mysqlName());
+				query = query.concat(field.getColumn().getName());
 				
 				if (fieldsAmount > 0) query = query.concat(", ");
 				else query = query.concat(") VALUES (");
@@ -113,18 +73,18 @@ public abstract class MysqlDataRow
 			fieldsAmount = keyFields.size() + liquidFields.size();
 			
 			//key fields
-			for (DataField field : keyFields) {
+			for (MysqlData field : keyFields) {
 				fieldsAmount--;
-				query = query.concat(field.value());
+				query = query.concat(field.getQueryValue());
 				
 				if (fieldsAmount > 0) query = query.concat(", ");
 				else query = query.concat(") ");
 			}
 			
 			//liquid fields
-			for (DataField field : liquidFields) {
+			for (MysqlData field : liquidFields) {
 				fieldsAmount--;
-				query = query.concat(field.value());
+				query = query.concat(field.getQueryValue());
 				
 				if (fieldsAmount > 0) query = query.concat(", ");
 				else query = query.concat(") ");
@@ -149,7 +109,7 @@ public abstract class MysqlDataRow
 	 * @return true if the data was deleted successfully.
 	 */
 	public boolean delete() {
-		String query = "DELETE FROM " + tableName() + " " + keyCondition();
+		String query = "DELETE FROM " + tableName + " " + keyCondition();
 		try {
 			MysqlModifier.write(query);
 			return true;
@@ -166,7 +126,7 @@ public abstract class MysqlDataRow
 		try {
 			String query = "SELECT EXISTS ( "
 					  	 + "	SELECT * "
-					  	 + "	FROM " + tableName() + " "
+					  	 + "	FROM " + tableName + " "
 					  	 + keyCondition() + ") AS key_exists";
 			
 			return MysqlModifier.readBOOLEAN(query, "key_exists");
@@ -178,7 +138,7 @@ public abstract class MysqlDataRow
 	 * @return a query that selects all of the columns for this row.
 	 */
 	protected String selectAllQuery() {
-		return "SELECT * FROM " + tableName() + " " + keyCondition();
+		return "SELECT * FROM " + tableName + " " + keyCondition();
 	}
 	
 	/**
@@ -188,11 +148,11 @@ public abstract class MysqlDataRow
 		if (keyFields.isEmpty()) return "";
 		else {
 			String condition = "WHERE ";
-			DataField tempField;
+			MysqlData tempField;
 			
 			for (int i = 0; i < keyFields.size(); i++) {
 				tempField = keyFields.get(i);
-				condition = condition.concat(tempField.mysqlName() + " = " + tempField.value());
+				condition = condition.concat(tempField.getColumn().getName() + " = " + tempField.getQueryValue());
 				
 				if (i < keyFields.size() - 1) condition = condition.concat(" AND ");
 			}
@@ -202,22 +162,55 @@ public abstract class MysqlDataRow
 	}
 	
 	/**
-	 * @return the name of the data base table this row belongs to.
+	 * @param fieldColumn - The column of the field
+	 * @return - A data from the row, contained in the specified field
 	 */
-	protected abstract String tableName();
+	protected Object getField(MysqlColumn fieldColumn) {
+		List<MysqlData> allFields = new ArrayList<MysqlData>(keyFields);
+		allFields.addAll(liquidFields);
+		
+		for (MysqlData field : allFields) {
+			if (field.getColumn().equals(fieldColumn))
+				return field.getValue();
+		}
+		
+		return null;
+	}
 	
 	/**
-	 * @param field - Primary key data field
+	 * @param fieldColumn - The column to change the field of
+	 * @param value - The new value to set for the field
 	 */
-	protected void addKeyField(DataField field) {
-		keyFields.add(field);
+	protected void setField(MysqlColumn fieldColumn, Object value) {
+		List<MysqlData> allFields = new ArrayList<MysqlData>(keyFields);
+		allFields.addAll(liquidFields);
+		
+		for (MysqlData field : allFields) {
+			if (field.getColumn().equals(fieldColumn)) {
+				field.setValue(value);
+				break;
+			}
+		}
+	}
+
+	/**
+	 * @param column - The column that contains the field
+	 */
+	protected void addKeyField(MysqlColumn column, Object value) {
+		addField(keyFields, column, value);
 	}
 	
 	/**
 	 * @param field - non-primary key data field
 	 */
-	protected void addLiquidField(DataField field) {
-		liquidFields.add(field);
+	protected void addLiquidField(MysqlColumn column, Object value) {
+		addField(liquidFields, column, value);
+	}
+	
+	private void addField(List<MysqlData> list, MysqlColumn column, Object value) {
+		MysqlData field = new MysqlData(column);
+		field.setValue(value);
+		list.add(field);
 	}
 	
 	/**

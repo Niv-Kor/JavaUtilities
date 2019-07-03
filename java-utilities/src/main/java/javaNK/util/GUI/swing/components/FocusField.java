@@ -54,4 +54,6 @@ public class FocusField extends JPasswordField implements FocusListener
 		setText("");
 		focusLost(null);
 	}
+	
+	public boolean isBlank() { return getText().equals(defaultMessage); }
 }

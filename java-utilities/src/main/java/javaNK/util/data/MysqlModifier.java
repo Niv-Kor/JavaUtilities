@@ -1,13 +1,16 @@
 package javaNK.util.data;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import com.mysql.cj.jdbc.exceptions.CommunicationsException;
+import java.util.HashMap;
+import java.util.Map;
+import javaNK.util.debugging.Logger;
+import javaNK.util.threads.SpoolingThread;
 
 /**
  * Connect to a MySQL database and perform any modifications to it -
@@ -17,42 +20,39 @@ import com.mysql.cj.jdbc.exceptions.CommunicationsException;
  */
 public class MysqlModifier
 {
+	private static class MysqlWriter extends SpoolingThread<String>
+	{
+		private Statement statement;
+		
+		public MysqlWriter(Statement statement) {
+			this.statement = statement;
+		}
+		
+		@Override
+		protected void spoolingFunction(String node) throws Exception {
+			statement.executeUpdate(node);
+		}
+	}
+	
 	private static final String NO_CONNECTION_ESTABLISED = "Please establish a connection to the schema first.";
+	private static final String RESULT_UPDATE_COUNT_ERROR = "Result set representing update count of -1";
 	
 	private static Statement statement;
+	private static MysqlWriter writer;
+	private static Map<String, ResultSet> resultMap;
 	
 	/**
 	 * Connect to a MySQL database.
 	 * 
-	 * @param host - The host of the data base.
-	 * 				 If using local host put 'localhost:[port number]',
-	 * 				 where the default port number is 3306.
-	 * @param schema - Name of the schema to use
-	 * @param username - The user name of the MySQL account (default is 'root')
-	 * @param password - The password of the MySQL account (leave 'null' if there isn't a password)
+	 * @param connection - The MysqlConnection object that was used to connect to the data base
 	 * @return true if the connection was successful.
 	 */
-	public static boolean connect(String host, String schema, String username, String password) {
-		String timezoneSettings = "?useLegacyDatetimeCode=false&serverTimezone=UTC";
-		String Hostname = "jdbc:mysql://" + host + "/" + schema + timezoneSettings;
-		Connection connection;
-		
-		try {
-			Class.forName("com.mysql.cj.jdbc.Driver");
-			connection = DriverManager.getConnection(Hostname, username, password);
-			statement = connection.createStatement();
-			return true;
-		}
-		catch(CommunicationsException e) {
-			System.err.println("Could not connect to MySQL database due to network failure.\n"
-							 + "Please check your internet connection and try again.");
-		}
-		catch (Exception e) {
-			System.err.println("Could not connect to MySQL database.");
-			e.printStackTrace();
-		}
-		
-		return false;
+	public static boolean connect(MysqlConnection connection) {
+		statement = connection.getStatement();
+		writer = new MysqlWriter(statement);
+		writer.start();
+		resultMap = new HashMap<String, ResultSet>();
+		return statement != null;
 	}
 	
 	/**
@@ -65,7 +65,45 @@ public class MysqlModifier
 	 */
 	public static void write(String query) throws SQLException {
 		checkConnection();
-		statement.executeUpdate(query);
+		writer.enqueue(query);
+		resultMap.clear();
+	}
+	
+	public static Object[][] getRows(String query, MysqlColumn... columns) throws SQLException {
+		ResultSet resultSet = execute(query);
+		resultSet.last();
+		int lines = resultSet.getRow();
+		resultSet.first();
+		Object[][] obj = new Object[lines][columns.length];
+		
+		for (int i = 0; i < obj.length; i++, resultSet.next()) {
+			for (int j = 0; j < obj[0].length; j++) {
+				try { obj[i][j] = columns[j].getDataType().getValue(resultSet, columns[j].getName()); }
+				catch (SQLException e) { obj[i][j] = null; }
+			}
+		}
+		
+		return obj;
+	}
+	
+	public static ResultSet execute(String query) throws SQLException {
+		ResultSet resultSet = resultMap.get(query);
+		
+		if (resultSet == null) {
+			resultSet = statement.executeQuery(query);
+			resultMap.put(query, resultSet);
+		}
+		
+		//the result set encountered an error - create it again
+		if (resultSet.toString().equals(RESULT_UPDATE_COUNT_ERROR) || resultSet.isClosed()) {
+			resultMap.remove(query);
+			return execute(query);
+		}
+		
+		//move its position to the beginning
+		else resultSet.beforeFirst();
+		
+		return resultSet;
 	}
 	
 	/**
@@ -78,7 +116,7 @@ public class MysqlModifier
 	 */
 	public static int readINT(String query, String column) throws SQLException {
 		checkConnection();
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		
 		if (resultSet.next()) return resultSet.getInt(column);
 		else throw new SQLException();
@@ -96,7 +134,7 @@ public class MysqlModifier
 		checkConnection();
 		ArrayList<Integer> list = new ArrayList<Integer>();
 		
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		while (resultSet.next()) list.add(resultSet.getInt(column));
 
 		return list;
@@ -112,7 +150,7 @@ public class MysqlModifier
 	 */
 	public static double readDECIMAL(String query, String column) throws SQLException {
 		checkConnection();
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		
 		if (resultSet.next()) return resultSet.getDouble(column);
 		else throw new SQLException();
@@ -130,7 +168,7 @@ public class MysqlModifier
 		checkConnection();
 		ArrayList<Double> list = new ArrayList<Double>();
 		
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		while (resultSet.next()) list.add(resultSet.getDouble(column));
 
 		return list;
@@ -146,7 +184,7 @@ public class MysqlModifier
 	 */
 	public static String readVARCHAR(String query, String column) throws SQLException {
 		checkConnection();
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		
 		if (resultSet.next()) return resultSet.getString(column);
 		else throw new SQLException();
@@ -164,7 +202,7 @@ public class MysqlModifier
 		checkConnection();
 		ArrayList<String> list = new ArrayList<String>();
 		
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		while (resultSet.next()) list.add(resultSet.getString(column));
 		
 		return list;
@@ -180,7 +218,7 @@ public class MysqlModifier
 	 */
 	public static boolean readBOOLEAN(String query, String column) throws SQLException {
 		checkConnection();
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		
 		if (resultSet.next()) return resultSet.getBoolean(column);
 		else throw new SQLException();
@@ -198,7 +236,7 @@ public class MysqlModifier
 		checkConnection();
 		ArrayList<Boolean> list = new ArrayList<Boolean>();
 		
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		while (resultSet.next()) list.add(resultSet.getBoolean(column));
 
 		return list;
@@ -214,26 +252,34 @@ public class MysqlModifier
 	 */
 	public static Timestamp readTIMESTAMP(String query, String column) throws SQLException {
 		checkConnection();
-		ResultSet resultSet = statement.executeQuery(query);
+		ResultSet resultSet = execute(query);
 		
-		if (resultSet.next()) return resultSet.getTimestamp(column);
+		if (resultSet.next()) {
+			LocalDateTime tempDate = resultSet.getTimestamp(column).toLocalDateTime();
+			tempDate = tempDate.minusHours(timeZoneDifference());
+			return Timestamp.valueOf(tempDate);
+		}
 		else throw new SQLException();
 	}
 	
 	/**
-	 * Get a list of all Date values from a column of a table.
+	 * Get a list of all Timestamp values from a column of a table.
 	 * 
 	 * @param query - The query to execute
 	 * @param column - Name of the column
-	 * @return a list of Date values.
+	 * @return a list of Timestamp values.
 	 * @throws SQLException when the query has errors, or the connection has not been established.
 	 */
-	public static ArrayList<Date> readAllDATE(String query, String column) throws SQLException {
+	public static ArrayList<Timestamp> readAllTIMESTAMP(String query, String column) throws SQLException {
 		checkConnection();
-		ArrayList<Date> list = new ArrayList<Date>();
+		ArrayList<Timestamp> list = new ArrayList<Timestamp>();
 		
-		ResultSet resultSet = statement.executeQuery(query);
-		while (resultSet.next()) list.add(resultSet.getDate(column));
+		ResultSet resultSet = execute(query);
+		while (resultSet.next()) {
+			LocalDateTime tempDate = resultSet.getTimestamp(column).toLocalDateTime();
+			tempDate = tempDate.minusHours(timeZoneDifference());
+			list.add(Timestamp.valueOf(tempDate));
+		}
 
 		return list;
 	}
@@ -260,8 +306,20 @@ public class MysqlModifier
 	 */
 	private static void checkConnection() throws SQLException {
 		if (statement == null) {
-			System.err.println(NO_CONNECTION_ESTABLISED);
+			Logger.error(NO_CONNECTION_ESTABLISED);
 			throw new SQLException();
 		}
+	}
+	
+	private static int timeZoneDifference() {
+		ZoneId timeZone = ZoneId.systemDefault();
+		ZonedDateTime zoneDate = ZonedDateTime.now(timeZone);
+		String zoneDateStr = zoneDate.toString();
+		int hourIndex = zoneDateStr.indexOf('[') - 5;
+		int hoursDiff = Integer.parseInt(zoneDateStr.substring(hourIndex, hourIndex + 2));
+		boolean negative = zoneDateStr.charAt(hourIndex - 1) == '-';
+		if (negative) hoursDiff *= -1;
+		
+		return hoursDiff;
 	}
 }

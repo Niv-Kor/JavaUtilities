@@ -2,7 +2,6 @@ package javaNK.util.networking;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.SocketException;
 import java.time.LocalDateTime;
 import java.util.AbstractMap.SimpleEntry;
@@ -13,9 +12,8 @@ import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
-
-import javaNK.util.debugging.Logger;
 import javaNK.util.threads.DiligentThread;
+import javaNK.util.threads.SpoolingThread;
 import javaNK.util.threads.ThreadUtility;
 
 /**
@@ -145,13 +143,7 @@ public class Protocol
 		
 		@Override
 		protected void diligentFunction() throws Exception {
-			try { sorter.sortPackage(protocol.receive()); }
-			catch (IOException e) {
-				if (running) { //real problem
-					Logger.error("Processor error");
-					e.printStackTrace();
-				}
-			}
+			sorter.enqueue(protocol.receive());
 		}
 	}
 	
@@ -161,7 +153,7 @@ public class Protocol
 	 * 
 	 * @author Niv Kor
 	 */
-	private static class PackageSorter extends DiligentThread
+	private static class PackageSorter extends SpoolingThread<JSON>
 	{
 		private static class Archiver extends DiligentThread
 		{
@@ -196,7 +188,6 @@ public class Protocol
 		}
 		
 		private Archiver archiver;
-		private Queue<JSON> messages;
 		private Set<ThreadRequest> requests;
 		private Protocol protocol;
 		
@@ -205,34 +196,14 @@ public class Protocol
 		 * @param requests - Set of thread requests from protocol
 		 */
 		public PackageSorter(Protocol protocol, Set<ThreadRequest> requests) {
-			super(0.008);
 			this.protocol = protocol;
 			this.requests = requests;
-			this.messages = new LinkedList<JSON>();
 			this.archiver = new Archiver(this, 2.5);
 		}
-
-		/**
-		 * Add a package that needs to be sorted to the packages queue.
-		 * 
-		 * @param message - The message to sort
-		 */
-		public void sortPackage(JSON message) { messages.add(message); }
 		
 		@Override
-		protected void diligentFunction() throws Exception {
-			if (!messages.isEmpty()) {
-				try {
-					JSON msg = messages.poll();
-					if (!sort(msg)) archiver.archive(msg);
-				}
-				catch (IOException e) {
-					if (running) { //real problem
-						Logger.error("Sorter error");
-						e.printStackTrace();
-					}
-				}
-			}
+		protected void spoolingFunction(JSON node) throws Exception {
+			if (!sort(node)) archiver.archive(node);
 		}
 		
 		private boolean sort(JSON msg) throws IOException {
@@ -262,12 +233,6 @@ public class Protocol
 			return sorted;
 		}
 		
-		/**
-		 * Clear messages queue.
-		 */
-		public void flush() { messages.clear(); }
-		
-
 		@Override
 		public void start() {
 			super.start();
@@ -295,24 +260,23 @@ public class Protocol
 	protected volatile PackageProcessor processor;
 	protected volatile Set<ThreadRequest> requestBuffer;
 	protected volatile Queue<Long> requestingOrder;
-	protected volatile InetAddress serverAddress;
+	protected volatile NetworkInformation networkInfo, remoteInfo;
 	protected volatile DatagramSocket socket;
-	protected volatile Integer localPort, remotePort;
-	protected volatile boolean dead;
+	protected volatile boolean isDead;
 	
 	/**
 	 * @throws IOException when connection cannot not be established.
 	 */
 	public Protocol() throws IOException {
-		init(null, null);
+		init(new NetworkInformation(), new NetworkInformation());
 	}
 	
 	/**
 	 * @param port - The port this protocol will listen to
 	 * @throws IOException when connection cannot not be established.
 	 */
-	public Protocol(Integer port) throws IOException {
-		init(port, null);
+	public Protocol(NetworkInformation localInformation) throws IOException {
+		init(localInformation, new NetworkInformation());
 	}
 	
 	/**
@@ -320,8 +284,8 @@ public class Protocol
 	 * @param targetPort - The port this protocol will communicate with
 	 * @throws IOException when connection cannot not be established.
 	 */
-	public Protocol(Integer port, Integer targetPort) throws IOException {
-		init(port, targetPort);
+	public Protocol(NetworkInformation localInformation, NetworkInformation remoteInformation) throws IOException {
+		init(localInformation, remoteInformation);
 	}
 	
 	/**
@@ -329,14 +293,10 @@ public class Protocol
 	 * 
 	 * @throws IOException
 	 */
-	protected void init(Integer port, Integer target) throws IOException {
+	protected void init(NetworkInformation localInformation, NetworkInformation remoteInformation) throws IOException {
 		//ports
-		this.serverAddress = InetAddress.getLocalHost();
-		
-		try { this.localPort = (port != null) ? port : PortGenerator.nextPort(); }
-		catch (PortsUnavailableException e) { throw new IOException(); }
-		
-		this.remotePort = (target != null) ? target : 0;
+		this.networkInfo = localInformation;
+		this.remoteInfo = remoteInformation;
 		
 		//threads requests buffer and order
 		this.requestBuffer = new HashSet<ThreadRequest>();
@@ -350,7 +310,7 @@ public class Protocol
 		this.processor = new PackageProcessor(this, sorter);
 		new Thread(processor).start();
 		
-		connect();
+		bind();
 	}
 	
 	/**
@@ -502,8 +462,19 @@ public class Protocol
 	 * @throws IOException when the target port is unavailable for sending messages to.
 	 */
 	public void send(JSON msg) throws IOException {
+		send(msg, remoteInfo);
+	}
+	
+	/**
+	 * @see send(JSON)
+	 * @param remoteInfo - The network information of the target
+	 */
+	public void send(JSON msg, NetworkInformation remoteInfo) throws IOException {
 		byte[] data = msg.toString().getBytes();
-		DatagramPacket packet = new DatagramPacket(data, data.length, serverAddress, remotePort);
+		DatagramPacket packet = new DatagramPacket(data, data.length,
+												   remoteInfo.getAddress(),
+												   remoteInfo.getLocalPort());
+		
 		socket.send(packet);
 	}
 	
@@ -524,31 +495,35 @@ public class Protocol
 	}
 	
 	/**
-	 * Create a socket and connect to the host.
+	 * Create a socket and bind to the host.
 	 * 
 	 * @throws SocketException when the socket is already binded.
 	 */
-	protected void connect() throws SocketException {
-		if (!dead) {
-			socket = new DatagramSocket(localPort);
+	public void bind() throws SocketException {
+		if (!isDead) {
+			socket = new DatagramSocket(networkInfo.getLocalPort());
 			processor.pause(false);
 			sorter.pause(false);
 		}
 	}
 	
 	/**
-	 * Break the receive block.
-	 *  
-	 * @throws SocketException when there are troubles reconnecting to the socket.
+	 * Create a socket and bind to the host.
+	 * 
+	 * @throws SocketException when the socket is already binded.
 	 */
-	protected void breakReceiveBlock() throws SocketException {
-		
+	public void bind(int port) throws SocketException {
+		if (!isDead) {
+			socket = new DatagramSocket(networkInfo.getLocalPort());
+			processor.pause(false);
+			sorter.pause(false);
+		}
 	}
 	
 	/**
 	 * Close the protocol temporarily.
 	 */
-	protected void disconnect() {
+	public void unbind() {
 		processor.pause(true);
 		sorter.pause(true);
 		socket.close();
@@ -561,10 +536,10 @@ public class Protocol
 		try { flush(); }
 		catch (SocketException e) {}
 		
-		disconnect();
+		unbind();
 		processor.kill();
 		sorter.kill();
-		dead = true;
+		isDead = true;
 	}
 	
 	/**
@@ -584,9 +559,9 @@ public class Protocol
 		
 		//reconnect
 		String allocationStr = "protocl_" + toString() + "_" + LocalDateTime.now() + "_reconnection";
-		PortGenerator.allocate(allocationStr, localPort);
-		disconnect();
-		connect();
+		PortGenerator.allocate(allocationStr, networkInfo.getLocalPort());
+		unbind();
+		bind();
 		
 		//turn components back on
 		sorter.pause(false);
@@ -594,37 +569,42 @@ public class Protocol
 	}
 	
 	/**
-	 * @return the port this protocol uses.
-	 */
-	public int getLocalPort() { return localPort; }
-	
-	/**
-	 * @return the target port this protocol communicates with.
-	 */
-	public int getRemotePort() { return remotePort; }
-	
-	/**
 	 * @param p - The new port to use
-	 * @throws SocketException 
+	 * @throws SocketException when a problem occurs when trying to bind.
 	 */
 	public void setLocalPort(int p) throws SocketException {
-		disconnect();
-		localPort = p;
-		connect();
+		unbind();
+		networkInfo.setLocalPort(p);
+		bind();
 	}
 	
 	/**
 	 * Generate a port randomly.
 	 * 
 	 * @throws PortsUnavailableException when no port is available.
-	 * @throws SocketException 
+	 * @throws SocketException  when a problem occurs when trying to bind.
 	 */
-	public void setLocalPort() throws PortsUnavailableException, SocketException {
-		setLocalPort(PortGenerator.nextPort());
-	}
+	public void setLocalPort() throws IOException { setLocalPort(PortGenerator.nextPort()); }
 	
 	/**
-	 * @param p - The new target port to communicate with
+	 * @return the local network information of the host of this protocol. 
 	 */
-	public void setRemotePort(int p) { remotePort = p; }
+	public NetworkInformation getLocalNetworkInformation() { return networkInfo; }
+	
+	/**
+	 * @return the remote network information of the target of this protocol.
+	 */
+	public NetworkInformation getRemoteNetworkInformation() { return remoteInfo; }
+	
+	public void setRemoteNetworkInformation(NetworkInformation netInfo) { remoteInfo = netInfo; }		
+	
+	/**
+	 * @param msg - A JSON message of type "network_information"
+	 * @throws IOException when one or more of the message parameters is invalid.
+	 */
+	public void setRemoteNetworkInformation(JSON msg) throws IOException {
+		int port = msg.getInt("port");
+		String ip = msg.getString("ip");
+		remoteInfo = new NetworkInformation(port, ip);
+	}
 }

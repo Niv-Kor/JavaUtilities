@@ -1,6 +1,12 @@
 package javaNK.util.threads;
 
-public abstract class QuickThread extends Thread
+/**
+ * A thread that perform an action only once, and then dies.
+ * The action can be set to run in X seconds or immediately.
+ * 
+ * @author Niv Kor
+ */
+public abstract class QuickThread extends Thread implements Handleable
 {
 	protected long delay;
 	protected volatile boolean canceled;
@@ -21,7 +27,7 @@ public abstract class QuickThread extends Thread
 		ThreadUtility.delay(delay);
 		if (!canceled) {
 			try { quickFunction(); }
-			catch (Exception e) { e.printStackTrace(); }
+			catch (Exception e) { handleException(e); }
 		}
 	}
 	
@@ -49,4 +55,7 @@ public abstract class QuickThread extends Thread
 	 * @throws Exception when something goes wrong with the function.
 	 */
 	public abstract void quickFunction() throws Exception;
+	
+	@Override
+	public void handleException(Exception e) { e.printStackTrace(); }
 }

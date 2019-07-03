@@ -12,7 +12,7 @@ import org.json.simple.parser.ParseException;
 public class JSON extends JSONObject
 {
 	private static final long serialVersionUID = 3472688265395105685L;
-
+	
 	/**
 	 * This constructor has two roles - create a new JSON object, or convert a string to JSON object.
 	 * 
@@ -70,6 +70,12 @@ public class JSON extends JSONObject
 		}
 	}
 	
+	@SuppressWarnings("unchecked")
+	public void merge(JSON other) {
+		for (Object key : other.keySet())
+			put(key, other.get(key));
+	}
+	
 	/**
 	 * @see JSONObject.put(Object, Object)
 	 */
@@ -107,6 +113,16 @@ public class JSON extends JSONObject
 	 */
 	public int getInt(String key) {
 		return Integer.parseInt(getString(key));
+	}
+	
+	/**
+	 * Get a double value from the message.
+	 * 
+	 * @param key - The key that's assigned to the desired value
+	 * @return the value as a double type.
+	 */
+	public double getDouble(String key) {
+		return Double.parseDouble(getString(key));
 	}
 	
 	/**

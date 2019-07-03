@@ -17,28 +17,22 @@ public class Week
 	public static DayOfWeek[] getWeek(DayOfWeek today) {
 		DayOfWeek[] week = new DayOfWeek[7];
 		
-		for (int i = 0, j = today.getValue(); i < 7; i++, j++) {
-			week[i] = DayOfWeek.of(j);
-			if (j == DayOfWeek.SATURDAY.getValue())
-				j = DayOfWeek.SUNDAY.getValue();
-		}
+		for (int i = 0; i < 7; i++, today = today.plus(1))
+			week[i] = today;
 		
 		return week;
 	}
 	
 	/**
-	 * Progress a week one day forward.
+	 * Progress a week a number of days forward.
 	 * WARNING: This method changes the original array.
 	 * 
-	 * @param week - Array of 7 days (not varified)
+	 * @param week - Array of 7 days (not verified)
+	 * @param days - The amount of days to add
 	 */
-	public static void nextDay(DayOfWeek[] week) {
-		for (int i = 0; i < week.length; i++) {
-			if (week[i] != DayOfWeek.SATURDAY)
-				week[i] = DayOfWeek.of(week[i].getValue() + 1);
-			else
-				week[i] = DayOfWeek.SUNDAY;
-		}
+	public static void plus(DayOfWeek[] week, int days) {
+		for (int i = 0; i < week.length; i++)
+			week[i] = week[i].plus(days);
 	}
 	
 	/**
