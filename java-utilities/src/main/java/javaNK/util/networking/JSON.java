@@ -155,6 +155,16 @@ public class JSON extends JSONObject
 		return new JSON(getString(key), true);
 	}
 	
+	public JSON[] getJSONArray(String key) {
+		String[] strArr = getStringArray(key);
+		JSON[] jsonArr = new JSON[strArr.length];
+		
+		for (int i = 0; i < jsonArr.length; i++)
+			jsonArr[i] = new JSON(strArr[i], true);
+		
+		return jsonArr;
+	}
+	
 	/**
 	 * Get an array of Strings from the message.
 	 * 
@@ -175,6 +185,15 @@ public class JSON extends JSONObject
 	 */
 	public boolean getBoolean(String key) {
 		return Boolean.parseBoolean(getString(key));
+	}
+	
+	public void putJSONArray(String key, JSON[] array) {
+		String[] strArr = new String[array.length];
+		
+		for (int i = 0; i < strArr.length; i++)
+			strArr[i] = array[i].encode();
+		
+		putArray(key, strArr);
 	}
 	
 	/**
