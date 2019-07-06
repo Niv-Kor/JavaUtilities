@@ -13,7 +13,7 @@ public class Logger
 	private static final String POSTFIX = ": ";
 	
 	private static String prefix = "Logger";
-	private static boolean addLine = true;
+	private static boolean addLine;
 	private static InputStream inputSt = System.in;
 	private static OutputStream outputSt = System.out;
 	private static OutputStream errorSt = System.err;

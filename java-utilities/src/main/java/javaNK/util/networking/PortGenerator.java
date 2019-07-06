@@ -35,7 +35,7 @@ public class PortGenerator
 		//test ports until one manages to connect
 		while (true) {
 			do port = (int) LEGAL_RANGE.generate();
-			while(failedPorts.contains(port) || allocatedPorts.containsValue(port));
+			while (failedPorts.contains(port) || allocatedPorts.containsValue(port));
 			
 			if (test(port)) return port;
 			else {
@@ -61,11 +61,12 @@ public class PortGenerator
 			testSocket.close();
 			return true;
 		}
-		catch(SocketException e) { return false; }
+		catch (SocketException ex) { return false; }
 	}
 	
 	/**
 	 * Check if a port is legal (normally between 2^10 and 2^16).
+	 * An allocated port will return an illegal result.
 	 * 
 	 * @param port - The port to check
 	 * @return true if the port is legal for use.
@@ -96,5 +97,31 @@ public class PortGenerator
 	 */
 	public static int getAllocated(String name) {
 		return allocatedPorts.get(name);
+	}
+	
+	/**
+	 * Check if a port is already allocated.
+	 * 
+	 * @param port - The port to check
+	 * @return true if the port is allocated.
+	 */
+	public static boolean isAllocated(int port) {
+		return allocatedPorts.containsValue(port);
+	}
+	
+	/**
+	 * Free an allocated port.
+	 * 
+	 * @param name - The port to deallocate
+	 */
+	public static void deallocate(String name) {
+		allocatedPorts.remove(name);
+	}
+	
+	/**
+	 * Free all allocated ports.
+	 */
+	public static void deallocateAll() {
+		allocatedPorts.clear();
 	}
 }

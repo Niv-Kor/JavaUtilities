@@ -80,5 +80,5 @@ public abstract class DiligentThread extends Thread implements Handleable
 	}
 	
 	@Override
-	public void handleException(Exception e) { e.printStackTrace(); }
+	public void handleException(Exception e) {}
 }

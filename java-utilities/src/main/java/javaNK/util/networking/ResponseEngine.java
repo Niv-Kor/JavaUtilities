@@ -3,8 +3,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import javaNK.util.debugging.Logger;
+import javaNK.util.threads.DaemonThread;
 import javaNK.util.threads.DiligentThread;
-import javaNK.util.threads.SpoolingThread;
 
 /**
  * This class collects all messages that are continuously received by a protocol,
@@ -22,7 +22,7 @@ public abstract class ResponseEngine extends DiligentThread
 	 * 
 	 * @author Niv Kor
 	 */
-	protected static class ResponseExcecutor extends SpoolingThread<JSON>
+	protected static class ResponseExcecutor extends DaemonThread<JSON>
 	{
 		protected volatile List<ResponseCase> services;
 		protected volatile boolean running;
@@ -113,7 +113,7 @@ public abstract class ResponseEngine extends DiligentThread
 	 * @param msg - The message to send forward to the executor
 	 */
 	protected void handle(JSON msg) {
-		executor.enqueue(msg);
+		executor.spool(msg);
 	}
 	
 	/**

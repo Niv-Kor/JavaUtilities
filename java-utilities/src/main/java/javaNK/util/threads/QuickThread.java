@@ -9,7 +9,7 @@ package javaNK.util.threads;
 public abstract class QuickThread extends Thread implements Handleable
 {
 	protected long delay;
-	protected volatile boolean canceled;
+	protected volatile boolean dead, paused;
 	
 	public QuickThread() {
 		this(0);
@@ -24,11 +24,23 @@ public abstract class QuickThread extends Thread implements Handleable
 	
 	@Override
 	public void run() {
-		ThreadUtility.delay(delay);
-		if (!canceled) {
+		long timeWaited = ThreadUtility.delay(delay);
+		
+		if (!dead) {
+			while (paused) {
+				//this can be interrupted by pause(false)
+				ThreadUtility.delay(8);
+				
+				//wait the remaining time
+				if (!paused) ThreadUtility.delay(delay - timeWaited);
+			}
+			
+			//now running
 			try { quickFunction(); }
 			catch (Exception e) { handleException(e); }
 		}
+		
+		dead = true;
 	}
 	
 	/**
@@ -45,9 +57,24 @@ public abstract class QuickThread extends Thread implements Handleable
 	 * Cancel the upcoming execution.
 	 */
 	public void cancel() {
-		canceled = true;
+		dead = true;
 		interrupt();
 	}
+	
+	/**
+	 * Pause or resume the thread.
+	 * 
+	 * @param flag - True to pause or false to resume
+	 */
+	public void pause(boolean flag) {
+		paused = flag;
+		interrupt();
+	}
+	
+	/**
+	 * @return true if the thread finished its job or was canceled.
+	 */
+	public boolean isDead() { return dead; }
 	
 	/**
 	 * The function to call once in this thread.
@@ -57,5 +84,5 @@ public abstract class QuickThread extends Thread implements Handleable
 	public abstract void quickFunction() throws Exception;
 	
 	@Override
-	public void handleException(Exception e) { e.printStackTrace(); }
+	public void handleException(Exception e) {}
 }

@@ -2,6 +2,7 @@ package javaNK.util.networking;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
+import javaNK.util.debugging.Logger;
 
 /**
  * This class modifies JSONObject objects, and eases their usability.
@@ -70,24 +71,24 @@ public class JSON extends JSONObject
 		}
 	}
 	
-	@SuppressWarnings("unchecked")
 	public void merge(JSON other) {
 		for (Object key : other.keySet())
-			put(key, other.get(key));
+			if (!key.equals("type")) put(key, other.get(key));
+	}
+	
+	@Override
+	public Object put(Object key, Object value) {
+		if (value instanceof JSON) return put(key.toString(), (JSON) value);
+		else return put(key.toString(), value);
 	}
 	
 	/**
+	 * Put a JSON object. 
+	 * 
 	 * @see JSONObject.put(Object, Object)
 	 */
-	@SuppressWarnings("unchecked")
-	public Object put(String key, Object value) {
-		return super.put(key, value);
-	}
-	
-	@SuppressWarnings("unchecked")
-	public void putJSON(String key, JSON value) {
-		value.replace("\"", "Q*U*T");
-		put(key, value.encode());
+	private Object put(String key, JSON value) {
+		return put(key, value.encode());
 	}
 	
 	/**
@@ -155,6 +156,10 @@ public class JSON extends JSONObject
 		return new JSON(getString(key), true);
 	}
 	
+	/**
+	 * @param key - The key that's assigned to the desired value
+	 * @return the value as an array of JSON objects.
+	 */
 	public JSON[] getJSONArray(String key) {
 		String[] strArr = getStringArray(key);
 		JSON[] jsonArr = new JSON[strArr.length];
@@ -187,7 +192,18 @@ public class JSON extends JSONObject
 		return Boolean.parseBoolean(getString(key));
 	}
 	
+	/**
+	 * Put an array of JSON objects.
+	 * 
+	 * @param key - The key of the field
+	 * @param array - Array of JSON objects
+	 */
 	public void putJSONArray(String key, JSON[] array) {
+		if (array == null) {
+			put(key, "^");
+			return;
+		}
+		
 		String[] strArr = new String[array.length];
 		
 		for (int i = 0; i < strArr.length; i++)
@@ -217,6 +233,14 @@ public class JSON extends JSONObject
 		put(key, arrayStr);
 	}
 	
+	/**
+	 * Encode a nested JSON message, which is actually a String.
+	 * In order to prevent the nested JSON message from participating in the
+	 * String modifications the primary message is taking part in, encode and hide it.
+	 * The private constructor JSON(String, boolean) knows how to decode a JSON String.
+	 * 
+	 * @return an encoded JSON message.
+	 */
 	private String encode() {
 		String encoded = toJSONString().
 						 replace(":", "C*O*L*N").
