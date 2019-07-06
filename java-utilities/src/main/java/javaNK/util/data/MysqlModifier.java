@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import javaNK.util.debugging.Logger;
-import javaNK.util.threads.SpoolingThread;
+import javaNK.util.threads.DaemonThread;
 
 /**
  * Connect to a MySQL database and perform any modifications to it -
@@ -20,10 +20,13 @@ import javaNK.util.threads.SpoolingThread;
  */
 public class MysqlModifier
 {
-	private static class MysqlWriter extends SpoolingThread<String>
+	private static class MysqlWriter extends DaemonThread<String>
 	{
 		private Statement statement;
 		
+		/**
+		 * @param statement - A statement object that's connected to the database.
+		 */
 		public MysqlWriter(Statement statement) {
 			this.statement = statement;
 		}
@@ -65,7 +68,7 @@ public class MysqlModifier
 	 */
 	public static void write(String query) throws SQLException {
 		checkConnection();
-		writer.enqueue(query);
+		writer.spool(query);
 		resultMap.clear();
 	}
 	
