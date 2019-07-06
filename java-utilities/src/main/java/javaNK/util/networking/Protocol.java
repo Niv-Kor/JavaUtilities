@@ -5,23 +5,28 @@ import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.time.LocalDateTime;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import javaNK.util.threads.DaemonThread;
 import javaNK.util.threads.DiligentThread;
-import javaNK.util.threads.SpoolingThread;
+import javaNK.util.threads.QuickThread;
 import javaNK.util.threads.ThreadUtility;
 
 /**
  * A UDP protocol used for communicating with a server.
  * This class is thread-safe, and can be used by many threads at the same time.
- * It only sends and receives messages in the form of a JSON object (also under this package).
+ * Messages can only be sent and received in the form of a JSON object (also under this package).
+ * This UDP protocol imitate some of TCP's properties, and provides with decent reliability.
  * 
  * @see javaNK.util.networking.JSON
+ * @see javaNK.util.networking.NetworkInformation
  * @author Niv Kor
  */
 public class Protocol
@@ -143,7 +148,7 @@ public class Protocol
 		
 		@Override
 		protected void diligentFunction() throws Exception {
-			sorter.enqueue(protocol.receive());
+			sorter.spool(protocol.receive());
 		}
 	}
 	
@@ -153,43 +158,94 @@ public class Protocol
 	 * 
 	 * @author Niv Kor
 	 */
-	private static class PackageSorter extends SpoolingThread<JSON>
+	private static class PackageSorter extends DaemonThread<JSON>
 	{
+		/**
+		 * This semi-class stores and manages all of the Resender objects
+		 * that were created for missed messages.
+		 * 
+		 * @author Niv Kor
+		 */
 		private static class Archiver extends DiligentThread
 		{
 			private PackageSorter sorter;
-			private Queue<JSON> missedMessages;
+			private List<Resender> resenders;
 			
-			public Archiver(PackageSorter sorter, double pulse) {
-				super(pulse);
-				this.missedMessages = new LinkedList<JSON>();
+			public Archiver(PackageSorter sorter) {
+				super(5);
 				this.sorter = sorter;
+				this.resenders = new ArrayList<Resender>();
 			}
 			
 			@Override
 			protected void diligentFunction() throws Exception {
-				//iterate over all missed messages and try to sort them again
-				for (JSON missedMsg : missedMessages)
-					sorter.sort(missedMsg);
-				
-				missedMessages.clear();
-				pause(true);
+				for (int i = 0; i < resenders.size(); i++) {
+					Resender resender = resenders.get(i);
+					if (resender.isDead()) resenders.remove(resender);
+				}
 			}
 			
 			/**
 			 * Archive a message and try to send it again later.
 			 * 
 			 * @param msg - The message to archive
+			 * @param sec - Amount of time (in seconds) until the second resend attempt
 			 */
-			public void archive(JSON msg) {
-				missedMessages.add(msg);
-				pause(false);
+			public void archive(JSON msg, double sec) {
+				Resender resender = new Resender(msg, sorter, sec);
+				resender.start();
+				resenders.add(resender);
+			}
+			
+			@Override
+			public void pause(boolean flag) {
+				super.pause(flag);
+				
+				for (int i = 0; i < resenders.size(); i++)
+					resenders.get(i).pause(flag);
+			}
+			
+			@Override
+			public void kill() {
+				super.kill();
+				
+				for (int i = 0; i < resenders.size(); i++)
+					resenders.get(i).cancel();
 			}
 		}
 		
-		private Archiver archiver;
+		/**
+		 * This semi-class archives a message that for some reason couldn't be sorted properly,
+		 * and tries to send it again after a specified amount of time.
+		 * A message that remains unsorted after the second attempt is then deleted permanently. 
+		 * 
+		 * @author Niv Kor
+		 */
+		private static class Resender extends QuickThread
+		{
+			private PackageSorter sorter;
+			private JSON missedMsg;
+			
+			/**
+			 * @param message - The message to archive
+			 * @param sorter - The Sorter object
+			 * @param delay - Amount of time to wait until execution
+			 */
+			public Resender(JSON message, PackageSorter sorter, double delay) {
+				super(delay);
+				this.missedMsg = message;
+				this.sorter = sorter;
+			}
+			
+			@Override
+			public void quickFunction() throws Exception {
+				sorter.sort(missedMsg);
+			}
+		}
+		
 		private Set<ThreadRequest> requests;
 		private Protocol protocol;
+		private Archiver archiver;
 		
 		/**
 		 * @param protocol - The main protocol object
@@ -198,15 +254,22 @@ public class Protocol
 		public PackageSorter(Protocol protocol, Set<ThreadRequest> requests) {
 			this.protocol = protocol;
 			this.requests = requests;
-			this.archiver = new Archiver(this, 2.5);
+			this.archiver = new Archiver(this);
 		}
 		
 		@Override
 		protected void spoolingFunction(JSON node) throws Exception {
-			if (!sort(node)) archiver.archive(node);
+			if (!sort(node)) archiver.archive(node, 2.5);
 		}
 		
-		private boolean sort(JSON msg) throws IOException {
+		/**
+		 * Sort a message and send it to the right threadRequest.
+		 * 
+		 * @param msg - Message to sort
+		 * @return true if the message found a rightful destination.
+		 * @throws IOException when the message is living ack and the socket is closed.
+		 */
+		public boolean sort(JSON msg) throws IOException {
 			boolean sorted = false;
 			
 			//received an ack that checks if this port is alive
@@ -223,7 +286,7 @@ public class Protocol
 						JSON overridenMessage = threadReq.putAnswer(msg.getType(), msg);
 						
 						if (overridenMessage != null)
-							archiver.archive(overridenMessage);
+							archiver.archive(overridenMessage, 2.5);
 						
 						sorted = true;
 					}
@@ -245,6 +308,7 @@ public class Protocol
 			archiver.pause(flag);
 		}
 		
+		@Override
 		public void kill() {
 			super.kill();
 			archiver.kill();
@@ -487,7 +551,7 @@ public class Protocol
 	 * @throws IOException when the target port is unavailable for receiving messages from.
 	 */
 	public JSON receive() throws IOException {
-		byte[] data = new byte[2024];
+		byte[] data = new byte[1024];
 		DatagramPacket packet = new DatagramPacket(data, data.length);
 		socket.receive(packet);
 		String message = new String(packet.getData(), 0, packet.getLength());
