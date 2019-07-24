@@ -7,6 +7,7 @@ public class Percentage
 	/**
 	 * Calculate the percentage of a numerator out of the denominator.
 	 * (Ex. 80 (numerator) out of 122 (denominator) is 65.57%).
+	 * 
 	 * @param numerator - The number to divide
 	 * @param denominator - The divisor
 	 * @return the percentage of the numerator divide by the denominator.
@@ -18,6 +19,7 @@ public class Percentage
 	/**
 	 * Calculate the number that X% of Y is.
 	 * (Ex. 80% (percent) of 122 (number) is 97.6).
+	 * 
 	 * @param perc - The percentage
 	 * @param number - The number to take percentage of
 	 * @return a number that is X% of Y. 
@@ -31,6 +33,7 @@ public class Percentage
 	 * If a number is under 0 - return 0;
 	 * If a number is over 100 - return 100;
 	 * If a number is between 0-100 - do nothing.
+	 * 
 	 * @param number - The number to limit
 	 * @return a value that's between 0-100.
 	 */
@@ -45,6 +48,7 @@ public class Percentage
 	 * If a number is under the minimum - return minimum;
 	 * If a number is over the maximum - return maximum;
 	 * If a number is within range - do nothing.
+	 * 
 	 * @param d - The number to limit
 	 * @return a value that's within the range.
 	 */
